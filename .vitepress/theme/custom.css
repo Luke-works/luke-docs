@@ -1,0 +1,142 @@
+/* ============================================================================
+   Luke Docs theme — re-skins the default VitePress theme toward the classic
+   Camunda 7 manual: technical blue links, orange accents, dense sidebar, a
+   flat/utilitarian feel rather than the rounded default.
+   ============================================================================ */
+
+:root {
+  /* Camunda-ish blue for links / brand, orange reserved for accents & admonitions */
+  --vp-c-brand-1: #0b6bcb;
+  --vp-c-brand-2: #0a5aad;
+  --vp-c-brand-3: #1a73c7;
+  --vp-c-brand-soft: rgba(11, 107, 203, 0.12);
+
+  --luke-orange: #e8590c;
+  --luke-orange-soft: rgba(232, 89, 12, 0.1);
+
+  /* Slightly wider sidebar + content for a manual that has many sections */
+  --vp-sidebar-width: 288px;
+  --vp-layout-max-width: 1520px;
+
+  --vp-font-family-base: 'Inter', 'Segoe UI', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono', 'SFMono-Regular', 'Menlo', 'Consolas', monospace;
+
+  /* Home hero brand gradient (component index card) */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #0b6bcb 30%, #14a0e8);
+}
+
+.dark {
+  --vp-c-brand-1: #4aa3e6;
+  --vp-c-brand-2: #6bb6ec;
+  --vp-c-brand-3: #2a7fc4;
+  --vp-c-brand-soft: rgba(74, 163, 230, 0.16);
+  --luke-orange: #ff8b4d;
+  --luke-orange-soft: rgba(255, 139, 77, 0.12);
+}
+
+/* ---- Header: a flatter, more "product manual" top bar ---- */
+.VPNav {
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+.VPNavBar.has-sidebar .content {
+  background-color: transparent;
+}
+
+/* ---- Sidebar: denser tree, section headers like the Camunda manual ---- */
+.VPSidebar {
+  padding-top: 12px;
+}
+.VPSidebarItem.level-0 > .item > .text {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-2);
+}
+.VPSidebarItem.level-0 {
+  padding-bottom: 10px;
+}
+.VPSidebarItem.level-1 .link .text,
+.VPSidebarItem.is-link .link .text {
+  font-size: 13.5px;
+}
+.VPSidebarItem.is-active > .item .link .text {
+  color: var(--vp-c-brand-1);
+  font-weight: 600;
+}
+
+/* Left accent bar on the active page — a manual-style current-page marker */
+.VPSidebarItem.is-active > .item {
+  box-shadow: inset 2px 0 0 var(--vp-c-brand-1);
+}
+
+/* ---- Content typography: tighter, more technical ---- */
+.vp-doc h1 {
+  font-size: 30px;
+  letter-spacing: -0.01em;
+}
+.vp-doc h2 {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--vp-c-divider);
+  font-size: 22px;
+}
+.vp-doc h3 {
+  font-size: 17px;
+  margin-top: 28px;
+}
+.vp-doc a {
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+/* Dense, bordered tables (the manual uses a lot of reference tables) */
+.vp-doc table {
+  display: table;
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.vp-doc th {
+  background-color: var(--vp-c-bg-soft);
+  font-weight: 600;
+}
+.vp-doc th,
+.vp-doc td {
+  border: 1px solid var(--vp-c-divider);
+  padding: 7px 12px;
+}
+
+/* Orange accent for inline code + the "custom block" tip border, Camunda-style */
+.vp-doc :not(pre) > code {
+  color: var(--luke-orange);
+  background-color: var(--luke-orange-soft);
+  border-radius: 3px;
+}
+.dark .vp-doc :not(pre) > code {
+  color: var(--luke-orange);
+}
+
+.custom-block.tip {
+  border-color: var(--vp-c-brand-1);
+}
+
+/* A small "status pill" utility usable inline in markdown via <span class="pill …"> */
+.pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.pill.ready { color: #1a7f37; background: rgba(26, 127, 55, 0.1); border-color: rgba(26, 127, 55, 0.25); }
+.pill.partial { color: var(--luke-orange); background: var(--luke-orange-soft); border-color: rgba(232, 89, 12, 0.25); }
+.pill.exp { color: #9a3412; background: rgba(154, 52, 18, 0.1); border-color: rgba(154, 52, 18, 0.25); }
+.pill.lib { color: #0b6bcb; background: rgba(11, 107, 203, 0.1); border-color: rgba(11, 107, 203, 0.25); }
+.dark .pill.ready { color: #3fb950; }
+.dark .pill.exp { color: #f0883e; }
+.dark .pill.lib { color: #4aa3e6; }

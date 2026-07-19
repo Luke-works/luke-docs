@@ -1,0 +1,41 @@
+# Render Blueprint — Lukeflow documentation site.
+#
+# A static VitePress build. This is a multi-page static site (not an SPA), so there is
+# deliberately NO catch-all rewrite to /index.html — that would break deep links. Render
+# resolves clean URLs (e.g. /services/core-engine) to the built .html files, and serves the
+# generated 404.html for genuine not-founds.
+services:
+  - type: web
+    name: luke-docs
+    runtime: static
+    # Only rebuild when the docs actually change.
+    buildFilter:
+      paths:
+        - "**/*.md"
+        - ".vitepress/**"
+        - "package.json"
+        - "package-lock.json"
+        - "render.yaml"
+    buildCommand: npm ci && npm run docs:build
+    staticPublishPath: ./.vitepress/dist
+    pullRequestPreviewsEnabled: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=31536000; includeSubDomains
+      # Immutable caching for the fingerprinted asset bundles VitePress emits.
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable

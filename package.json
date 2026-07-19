@@ -1,0 +1,15 @@
+{
+  "name": "luke-docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lukeflow platform documentation — a Camunda-7-manual-style wiki for the whole luke-* fleet",
+  "type": "module",
+  "scripts": {
+    "docs:dev": "vitepress dev",
+    "docs:build": "vitepress build",
+    "docs:preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.3"
+  }
+}
