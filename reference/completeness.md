@@ -13,11 +13,11 @@ elsewhere in the manual.
 | # | Repo | Feat | Qual | Tests | Docs | CI/CD | Hard | **Overall** | Status |
 | --- | --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | --- |
 | 1 | [luke-forms](/libraries/forms) | 95 | 95 | 98 | 90 | 92 | 96 | **94** | <span class="pill ready">Ready</span> |
-| 2 | [luke-agents](/services/agents) | 89 | 88 | 85 | 88 | 90 | 88 | **88** | <span class="pill ready">Ready</span> |
-| 3 | [luke-auth-engine](/services/auth-engine) | 90 | 88 | 85 | 82 | 85 | 92 | **88** | <span class="pill ready">Ready</span> |
-| 4 | [luke-core-engine](/services/core-engine) | 90 | 88 | 86 | 83 | 89 | 91 | **88** | <span class="pill partial">Partial</span> |
-| 5 | [luke-platform](/operations/platform) | 88 | 88 | 82 | 90 | 85 | 91 | **88** | <span class="pill partial">Partial</span> |
-| 6 | [luke-email](/libraries/email) | 90 | 90 | 85 | 82 | 80 | 90 | **87** | <span class="pill lib">Library</span> |
+| 2 | [luke-email](/libraries/email) | 90 | 91 | 94 | 92 | 93 | 92 | **93** | <span class="pill lib">Library</span> |
+| 3 | [luke-agents](/services/agents) | 89 | 88 | 85 | 88 | 90 | 88 | **88** | <span class="pill ready">Ready</span> |
+| 4 | [luke-auth-engine](/services/auth-engine) | 90 | 88 | 85 | 82 | 85 | 92 | **88** | <span class="pill ready">Ready</span> |
+| 5 | [luke-core-engine](/services/core-engine) | 90 | 88 | 86 | 83 | 89 | 91 | **88** | <span class="pill partial">Partial</span> |
+| 6 | [luke-platform](/operations/platform) | 88 | 88 | 82 | 90 | 85 | 91 | **88** | <span class="pill partial">Partial</span> |
 | 7 | [luke-consumer-ui](/apps/consumer-ui) | 88 | 85 | 85 | 62 | 90 | 80 | **84** | <span class="pill partial">Partial</span> |
 | 8 | [luke-file-proxy](/services/file-proxy) | 85 | 88 | 62 | 55 | 80 | 87 | **82** | <span class="pill partial">Partial</span> |
 | 9 | [luke-api-collection](/operations/api-collection) | 85 | 88 | 40 | 90 | 5 | 90 | **77** | <span class="pill partial">Partial</span> |
@@ -33,6 +33,14 @@ elsewhere in the manual.
 [core-engine](/services/core-engine).*
 
 **Fleet average overall ≈ 78%.**
+
+::: tip Recent uplift
+**[luke-email](/libraries/email)** was hardened to **[luke-forms](/libraries/forms) parity** (87 → 93):
+an enforceable public-API-surface guard + bundle-size budget in CI, property/fuzz + injection-safety
+tests (`email-core` 39 → 66 tests, the fuzz suites running 400 adversarial iterations each), and a
+full docs suite (`SECURITY.md` / `docs/SECURITY.md` / `docs/USAGE.md`). It is now the fleet's #2,
+second only to forms.
+:::
 
 ## Tiers
 

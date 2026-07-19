@@ -4,6 +4,32 @@ The whole non-production fleet is described by a **single Render Blueprint** —
 `render.yaml` in [`luke-platform`](/operations/platform) — that stands up every service
 across three environments sharing one database instance.
 
+## Topology
+
+```mermaid
+flowchart TB
+  bp["render.yaml<br/>(single Blueprint in luke-platform)"]:::meta
+  subgraph env["Per environment (dev · qa · uat)"]
+    eng["Core Engine"]:::svc
+    auth["Auth Engine"]:::svc
+    fp["File Proxy"]:::svc
+    ag["Agents"]:::svc
+    cui["Consumer UI<br/>(static)"]:::app
+    coreui["Core UI<br/>(static)"]:::app
+  end
+  pg[("Shared PostgreSQL<br/>schema + prefix per env")]:::data
+  bp -->|provisions| env
+  eng --> pg
+  cui --> auth --> eng
+  coreui --> eng
+  eng --> fp
+  eng --> ag
+  classDef meta fill:#f3e8ff,stroke:#7a5af8,color:#4c1d95;
+  classDef svc fill:#eaf6ff,stroke:#1a73c7,color:#0a4a8f;
+  classDef app fill:#e7f0fb,stroke:#0b6bcb,color:#0a4a8f;
+  classDef data fill:#eef7ee,stroke:#1a7f37,color:#12611f;
+```
+
 ## Environments
 
 | Environment | Purpose | Branch(es) |

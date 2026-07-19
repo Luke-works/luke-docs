@@ -11,9 +11,21 @@ and puts them in different places on purpose.
 
 ## The chain
 
-```
-Browser ──(WorkOS session JWT)──► Auth Engine ──(act-as-user RS256)──► Core Engine
-                                   verify + mint                       verify + enforce
+```mermaid
+sequenceDiagram
+  participant B as Browser (tenant)
+  participant W as WorkOS
+  participant G as Auth Engine (gateway)
+  participant E as Core Engine
+  B->>W: sign in
+  W-->>B: session JWT
+  B->>G: request + WorkOS JWT
+  G->>G: verify issuer + audience (fail-closed)
+  G->>G: mint short-lived act-as-user RS256 token
+  G->>E: proxy request + minted token + correlation id
+  E->>E: verify token, resolve groups + authorizations
+  E->>E: enforce per tenant (refuse foreign-tenant rows)
+  E-->>B: response (via gateway)
 ```
 
 | Stage | Component | Responsibility |

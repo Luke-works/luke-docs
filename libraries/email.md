@@ -110,7 +110,7 @@ npm test           # vitest across packages
 `dist/` is gitignored and absent on a fresh checkout, yet `typecheck` and the tests read each package's built `dist/*.d.ts`. Always `npm run build` first; the root build script builds in dependency order.
 :::
 
-CI (`.github/workflows/ci.yml`) runs **build → typecheck → lint → test**, plus a blocking supply-chain gate (`npm audit --omit=dev --audit-level=high`, CycloneDX SBOM). A separate `security-scan.yml` runs Semgrep / gitleaks / Trivy.
+CI (`.github/workflows/ci.yml`) runs **build → typecheck → API-surface guard (`npm run api`) → size budget (`npm run size`) → lint → test**, plus a blocking supply-chain gate (`npm audit --omit=dev --audit-level=high`, CycloneDX SBOM). A separate `security-scan.yml` runs Semgrep / gitleaks / Trivy. The API-surface guard snapshots each package's public `.d.ts` in `api-reports/`, so an accidental export/signature change fails CI and can't silently break the vendored consumer.
 
 ## Consumption
 
@@ -127,10 +127,11 @@ The AI drafting path (an [Agents (AI)](/services/agents) endpoint that emits an 
 
 ## Status & gaps
 
-<span class="pill lib">Alpha</span> — packages are at **`0.1.0-alpha.0`**. The model, renderer, builder, variable contract, and safety layer are built and green (~82 tests), and the library is vendored into the Consumer UI.
+<span class="pill lib">Alpha</span> — packages are at **`0.1.0-alpha.0`**, but the library was **hardened to [Forms](/libraries/forms)-level rigor**: the same enforceable public-API-surface guard and bundle-size budget, a full docs suite (`SECURITY.md`, `docs/SECURITY.md`, `docs/USAGE.md`), and property/fuzz + injection-safety tests. `email-core` alone carries **66 tests** (the fuzz suites run 400 adversarial iterations each).
 
-- **In scope and done:** the `EmailDoc` model + repair, the typed variable contract, the compile pipeline, the WYSIWYG builder, and the security/integrity guards.
-- **Deliberately out of scope:** actual send and inbound — these live as Camunda tasks in the [Core Engine](/services/core-engine) and are tracked there, not here.
-- **Alpha caveats:** version pre-1.0, `UNLICENSED`, and consumed via vendored dist (manual copy on each change) rather than a published package.
+- **In scope and done:** the `EmailDoc` model + repair, the typed variable contract, the compile pipeline, the WYSIWYG builder, and the security/integrity guards — all fuzz-tested to never throw and to produce a structurally valid, bounded, idempotent document.
+- **Gated in CI:** API-surface drift, bundle-size regressions, supply-chain advisories, and SAST/secret/dependency scans.
+- **Deliberately out of scope of the library:** actual **send** (built in the [Core Engine](/services/core-engine) via Postmark — see the [Email deep-dive](/capabilities/email)) and **inbound** (not yet built).
+- **Remaining caveats:** version pre-1.0, `UNLICENSED`, and consumed via vendored dist (manual copy on each change) rather than a published package.
 
 See the [Completeness Scorecard](/reference/completeness) for where this library sits against the rest of the platform.

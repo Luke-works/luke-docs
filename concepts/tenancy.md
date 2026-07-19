@@ -4,6 +4,26 @@ Lukeflow is **multi-tenant** end to end: every process, capability record, form,
 template, signature and document belongs to exactly one tenant, and the platform enforces
 that boundary at several layers.
 
+## Isolation at a glance
+
+```mermaid
+flowchart TB
+  req["Request<br/>(carries tenant context)"]:::ext
+  subgraph engine["Core Engine"]
+    filt["Tenant filter<br/>(X-Tenant-Id / token)"]:::core
+    q["Capability query<br/>tenant-scoped finders"]:::core
+    guard["Foreign-tenant read → refused"]:::core
+  end
+  pg[("PostgreSQL<br/>schema-name + table-prefix<br/>per environment")]:::data
+  s3[("S3<br/>tenant derived from token,<br/>never client-supplied")]:::data
+  req --> filt --> q --> guard
+  q --> pg
+  req -. documents/assets .-> s3
+  classDef ext fill:#eef2f7,stroke:#8a99ad,color:#33415c;
+  classDef core fill:#fff2e8,stroke:#e8590c,color:#9a3412;
+  classDef data fill:#eef7ee,stroke:#1a7f37,color:#12611f;
+```
+
 ## Tenancy in the engine
 
 The [Core Engine](/services/core-engine) is built on Camunda-7's native **tenant** concept.

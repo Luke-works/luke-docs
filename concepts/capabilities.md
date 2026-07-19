@@ -29,12 +29,12 @@ they were standalone services that got folded into the core (the "capability→c
 | Capability | What it does | Data layer | Authoring library | Runtime notes |
 | --- | --- | --- | --- | --- |
 | **Forms** | Render a form, collect & validate a submission, drive a user task | core-engine `form` module | [`luke-forms`](/libraries/forms) | Inbound (embed) & outbound (prefill+send) form kinds; server-side validation |
-| **Email** | Manage templates, compile HTML, send transactional email | core-engine `email` + `emailtemplate` | [`luke-email`](/libraries/email) | Template mgmt in the library; **send/inbound are Camunda tasks in the engine** |
+| **Email** | Manage templates, compile HTML, send transactional email | core-engine `email` + `emailtemplate` | [`luke-email`](/libraries/email) | Library = template mgmt only; **send is built in the engine via Postmark** (synchronous), inbound not yet — see the [Email deep-dive](/capabilities/email) |
 | **Signatures** | Design a signing layout, run a signing ceremony, produce a signed PDF | core-engine `signature` module | [`luke-signatures`](/libraries/signatures) | Native **PAdES** signing (PDFBox + BouncyCastle) is engine-side, not in the library |
 | **Phone** | Inbound & outbound AI voice calls | core-engine `phone` module | — | Via **Vapi.ai**; engine data layer + Camunda outbox + webhook |
 | **Documents** | Store & retrieve tenant files on S3 | core-engine `document` module | — | Bytes are brokered by the [File Proxy](/services/file-proxy), not the engine |
 | **Access** | Request/approve capability access; owners grant | core-engine `access` module | — | Members request → owners approve → auto-grant |
-| **Calendars / SLA** | Business calendars, holidays, SLA calculation | core-engine (calendar) | — | Surfaced in the [Core UI](/apps/core-ui) cockpit |
+| **Calendars / SLA** | Business calendars, holidays, SLA calculation | *(engine: registration only)* | — | The [Core UI](/apps/core-ui) cockpit is fully built, but the engine currently only **registers** the capability — no calendar controllers/services yet. See the [Calendars deep-dive](/capabilities/calendar) |
 | **Workflow** | Author a JSON workflow that compiles to BPMN | core-engine (compile) | [`luke-workflow`](/libraries/workflow) | <span class="pill exp">Pre-launch</span> hidden behind `VITE_WORKFLOW_ENABLED` |
 | **Lists** | Headless data-grid capability | *(not started)* | [`luke-lists`](/libraries/lists) | Library only; backend capability not yet built |
 | **Analytics** | Query + dashboard capability | *(not started)* | [`luke-analytics`](/libraries/analytics) | Library only; backend capability not yet built |

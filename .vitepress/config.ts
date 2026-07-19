@@ -46,6 +46,7 @@ export default withMermaid(defineConfig({
         items: [
           { text: 'Overview', link: '/guide/introduction' },
           { text: 'Architecture', link: '/guide/architecture' },
+          { text: 'Getting Started', link: '/guide/getting-started' },
           { text: 'The Fleet', link: '/guide/fleet-map' },
         ],
       },
@@ -71,6 +72,15 @@ export default withMermaid(defineConfig({
           { text: 'Access Management', link: '/capabilities/access' },
           { text: 'Calendars & SLA', link: '/capabilities/calendar' },
           { text: 'Workflow', link: '/capabilities/workflow' },
+        ],
+      },
+      {
+        text: 'Guides',
+        collapsed: false,
+        items: [
+          { text: 'Embed a Form', link: '/guides/embed-a-form' },
+          { text: 'Add a New Capability', link: '/guides/add-a-capability' },
+          { text: 'Deploy & Promote', link: '/guides/deploy' },
         ],
       },
       {
@@ -118,6 +128,9 @@ export default withMermaid(defineConfig({
         text: 'Reference',
         collapsed: false,
         items: [
+          { text: 'REST API / Endpoints', link: '/reference/endpoints' },
+          { text: 'Data Model', link: '/reference/data-model' },
+          { text: 'Environment Variables', link: '/reference/environment' },
           { text: 'Completeness Scorecard', link: '/reference/completeness' },
           { text: 'Glossary', link: '/reference/glossary' },
         ],
