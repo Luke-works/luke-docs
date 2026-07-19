@@ -183,18 +183,21 @@ The library is **alpha** (`0.1.0-alpha.0`) and vendored per the model above.
 
 | Area | State |
 | --- | --- |
-| `sign-core` logic | Covered — ~42 tests total (schema, lifecycle, geometry, adapters, client, plus a `sign-react` theme util) |
-| `sign-react` components | **Untested** — the ~2,000 LOC of React (`SignatureBuilder`, `SigningCeremony`, `DocumentViewer`, `AdoptSignature`, `SignaturePad`, `PdfView`) have no component tests |
-| CI | **None** — no `.github/workflows`, despite Changesets/release wiring being present |
+| `sign-core` logic | Covered — **54 tests** (schema, lifecycle, geometry, adapters, client) including a `schema.fuzz.test.ts` property suite (repair/parse/validate never throw + idempotent; geometry total incl. rotated-page refusal; the lifecycle publish gate) |
+| CI | **Added** — `.github/workflows/ci.yml`: build → typecheck → **API-surface guard** → **size budget** → test, plus a blocking supply-chain audit + CycloneDX SBOM. CI-green. |
+| `sign-react` components | **Still the frontier** — the ~2,000 LOC of React (`SignatureBuilder`, `SigningCeremony`, `DocumentViewer`, `AdoptSignature`, `SignaturePad`, `PdfView`) have no component tests (hard under jsdom + react-pdf) |
+| Docs | **Added** — `SECURITY.md` (injected-auth seam / no `X-User-Id`, coordinate integrity, engine-side PAdES boundary) + `docs/USAGE.md` |
 | PAdES signing | **Out of scope here** — implemented engine-side (PDFBox + BouncyCastle); this repo is the contract + UI only |
-| Engine endpoints | The `/api/signature-definitions` and `/api/signatures` surfaces the clients call are **expected**, to be implemented in the engine/core |
 
-::: danger Key gaps
-- **No CI pipeline** guards this repo — tests and build run only locally.
-- The **React components are untested**; only `sign-core` (and one theme helper)
-  have coverage.
-- **Cryptographic signing is external.** This library cannot produce a sealed,
-  legally-binding PDF on its own; it hands intent to the signing engine.
+::: tip Hardened (72 → 81)
+CI, the public-API-surface + size gates, a `sign-core` fuzz/edge suite, and a security/usage
+docs set were added — bringing signatures onto the same enforceable footing as forms/email.
+:::
+
+::: warning Remaining gaps
+- The **React components are still untested** (~2k LOC) — the main remaining lift.
+- **Cryptographic signing is external.** This library cannot produce a sealed, legally-binding
+  PDF on its own; it hands intent to the signing engine.
 :::
 
 For where this sits against the rest of the platform, see the

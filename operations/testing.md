@@ -29,12 +29,12 @@ Most repos run their tests as a **blocking** CI gate. Notable specifics:
 
 - **Java services** run `mvnw verify`; **libraries** run `build → typecheck → test`, several
   with a **blocking supply-chain audit** and a CycloneDX SBOM.
-- **`luke-forms`** additionally gates on an **API-surface guard** and a **size budget**.
+- **`luke-forms`**, **`luke-email`**, **`luke-signatures`** and **`luke-workflow`** additionally
+  gate on an **API-surface guard** (committed `api-reports/` snapshots) and a **size budget** —
+  signatures and workflow were wired up in the recent hardening pass (they previously had no CI).
 - **`luke-consumer-ui`** gates on `eslint --max-warnings 0` plus Playwright e2e.
 - **`luke-core-ui`** runs lint as **`continue-on-error`** (non-gating) — pre-existing `any`
   and lint debt do not fail the build.
-- **`luke-signatures`** and **`luke-workflow`** have **no CI workflow at all** yet, despite
-  release wiring — the most impactful quick win (see [Completeness Scorecard](/reference/completeness)).
 
 ## Manual & load testing
 
@@ -49,8 +49,8 @@ Most repos run their tests as a **blocking** CI gate. Notable specifics:
 Semgrep / gitleaks / Trivy scans run across the services (currently **informational /
 non-gating** on the engine and gateways). See [Security](/operations/security).
 
-::: tip Highest-leverage test work
-1. Add CI to `luke-signatures` and `luke-workflow` (already green locally, just ungated).
-2. Cover the `luke-signatures` React components (~2k LOC untested).
-3. Broaden `luke-core-ui` e2e beyond the single login spec.
+::: tip Highest-leverage test work (remaining)
+1. Cover the **React layers** of `luke-signatures` and `luke-workflow` (~2k LOC each, untested;
+   hard under jsdom + react-pdf / react-flow).
+2. Broaden `luke-core-ui` e2e beyond the single login spec.
 :::

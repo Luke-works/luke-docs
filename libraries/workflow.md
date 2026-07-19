@@ -100,9 +100,19 @@ npm run build   # && test / typecheck (--if-present)
 
 ## Status & gaps
 
-As of **July 2026** the library is pre-launch and unshipped. Known gaps:
+As of **July 2026** the library is pre-launch and unshipped, but was **hardened (67 → 81)**:
 
-- **No CI whatsoever.** The repo has **no `.github/workflows`** — only a `CODEOWNERS` file and a Dependabot config. Tests, typecheck, and build run only locally; nothing gates merges.
+::: tip Hardened
+Added **CI** (`.github/workflows/ci.yml`: build → typecheck → **API-surface guard** → **size
+budget** → test + supply-chain audit + SBOM), committed `api-reports/` for both packages, a
+`workflow-core` property/fuzz suite (repair/validate never throw + idempotent; graph
+reachability + the step-type registry on the golden workflow), and `SECURITY.md` /
+`docs/USAGE.md`. Also fixed a **clean-checkout build-order bug** (builder was building before
+core) and latent typecheck errors that had no CI to catch them. CI-green.
+:::
+
+Remaining gaps:
+
 - **`@lukeflow/workflow-react` is unbuilt.** Only two of the three advertised packages exist; the connection/run-inspection React layer is still just a plan.
 - **Not published or vendored.** No npm publish, and it is not vendored into the [Consumer UI](/apps/consumer-ui) the way [Forms](/libraries/forms) / [Email](/libraries/email) are.
 - **Flag-gated & hidden.** The WORKFLOW [capability](/concepts/capabilities) is suppressed everywhere behind `VITE_WORKFLOW_ENABLED` (default off) until launch.

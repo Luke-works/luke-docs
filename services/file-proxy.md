@@ -160,8 +160,9 @@ The service is **deployed and in active use** across the fleet's document, email
 submission-PDF paths, and it is architecturally healthy — the charter constraints keep it
 small on purpose. The gaps are about documentation and test depth, not missing function.
 
-- **No README.** The repo documents itself through `CHARTER.md` (the charter and hard
-  rules) and inline class Javadoc; there is no user-facing README or onboarding doc.
+- **README added** (82 → 85). The repo now has a comprehensive `README.md` — what it does,
+  the architecture (endpoint groups, `BlobStore`, the internal core handshake), local dev,
+  deployment, and hardening — alongside the design `CHARTER.md`.
 - **Thin controller tests.** Roughly **23 tests** cover the render controller, the document
   and email-asset controllers, `LocalFsBlobStore`, and the prod guard; `S3BlobStore` is
   only lightly covered by an env-gated smoke integration test that CI skips without live
