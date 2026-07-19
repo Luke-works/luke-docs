@@ -39,6 +39,16 @@ they were standalone services that got folded into the core (the "capability→c
 | **Lists** | Headless data-grid capability | *(not started)* | [`luke-lists`](/libraries/lists) | Library only; backend capability not yet built |
 | **Analytics** | Query + dashboard capability | *(not started)* | [`luke-analytics`](/libraries/analytics) | Library only; backend capability not yet built |
 
+::: tip Deep dives
+This page is the catalog. For the **component-and-function-level** breakdown of each
+capability — with architecture diagrams, sequence diagrams of the real call flow, and
+tables of every class, service, endpoint and function — see the **Capability Deep-Dives**:
+[Forms](/capabilities/forms) · [Email](/capabilities/email) ·
+[Signatures](/capabilities/signatures) · [Phone](/capabilities/phone) ·
+[Documents](/capabilities/documents) · [Access](/capabilities/access) ·
+[Calendars & SLA](/capabilities/calendar) · [Workflow](/capabilities/workflow)
+:::
+
 ## Anatomy of a capability
 
 Most capabilities have the same three layers:

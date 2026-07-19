@@ -9,33 +9,42 @@ Lukeflow is a **hub-and-spoke** system. The hub is the [Core Engine](/services/c
 — a BPMN process engine that also hosts the capability data layer. The spokes are the
 applications, headless libraries, auth gateway, file proxy and AI agents.
 
-```
-                            ┌───────────────────────────┐
-   Browser (tenant)  ─────► │  Consumer UI  (React/Vite) │
-                            └─────────────┬─────────────┘
-   Browser (operator) ────► │  Core UI (Cockpit)         │
-                            └─────────────┬─────────────┘
-                                          │  HTTPS (WorkOS JWT / Basic)
-                                          ▼
-                            ┌───────────────────────────┐
-                            │  Auth Engine (stateless)  │  verify WorkOS JWT →
-                            │  WorkOS ↔ engine gateway  │  mint act-as-user RS256 →
-                            └─────────────┬─────────────┘  proxy
-                                          ▼
-        ┌─────────────────────────────────────────────────────────────┐
-        │  CORE ENGINE  (Java / Spring / FluxNova = Camunda-7 fork)    │
-        │                                                             │
-        │   BPMN engine  ◄──outbox/job-worker──►  Capability layer    │
-        │   (process orchestration)               (forms, email,      │
-        │                                          signature, phone,  │
-        │                                          document, access…) │
-        └───────┬───────────────────────────────────────┬────────────┘
-                │ SQL                                     │ delegate byte / AI work
-                ▼                                         ▼
-        ┌───────────────┐                      ┌────────────────────────┐
-        │  PostgreSQL   │                      │  File Proxy (S3/PDF)    │
-        │  + Flyway     │                      │  Agents (FastAPI/LLM)   │
-        └───────────────┘                      └────────────────────────┘
+```mermaid
+flowchart TB
+  tenant([Browser · tenant]):::ext
+  operator([Browser · operator]):::ext
+
+  subgraph apps[Applications]
+    cui[Consumer UI<br/>React / Vite]:::app
+    coreui[Core UI · Cockpit<br/>React / Vite]:::app
+  end
+
+  auth[Auth Engine · stateless<br/>verify WorkOS JWT →<br/>mint act-as-user RS256 → proxy]:::svc
+
+  subgraph engine[Core Engine · Java / Spring / FluxNova · Camunda-7 fork]
+    bpmn[BPMN engine<br/>process orchestration]:::core
+    caps[Capability layer<br/>forms · email · signature<br/>phone · document · access]:::core
+    bpmn <-->|outbox / job-worker| caps
+  end
+
+  db[(PostgreSQL<br/>+ Flyway)]:::data
+  fp[File Proxy<br/>S3 bytes / PDF render]:::svc
+  ai[Agents<br/>FastAPI / LLM]:::svc
+
+  tenant --> cui
+  operator --> coreui
+  cui -->|WorkOS JWT| auth
+  coreui -->|HTTP Basic| engine
+  auth -->|act-as-user token| engine
+  engine -->|SQL| db
+  caps -->|delegate bytes| fp
+  caps -->|delegate AI work| ai
+
+  classDef ext fill:#eef2f7,stroke:#8a99ad,color:#33415c;
+  classDef app fill:#e7f0fb,stroke:#0b6bcb,color:#0a4a8f;
+  classDef svc fill:#eaf6ff,stroke:#1a73c7,color:#0a4a8f;
+  classDef core fill:#fff2e8,stroke:#e8590c,color:#9a3412;
+  classDef data fill:#eef7ee,stroke:#1a7f37,color:#12611f;
 ```
 
 ## The three architectural decisions

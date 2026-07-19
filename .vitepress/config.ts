@@ -1,10 +1,11 @@
 import { defineConfig } from 'vitepress'
+import { withMermaid } from 'vitepress-plugin-mermaid'
 
 // Luke Docs — a Camunda-7-manual-style wiki for the whole Lukeflow (luke-*) fleet.
 // Snapshot date is surfaced in the footer so readers know how current the content is.
 const SNAPSHOT = 'July 2026'
 
-export default defineConfig({
+export default withMermaid(defineConfig({
   title: 'Luke Docs',
   description:
     'The manual for the Lukeflow platform — a multi-tenant BPMN process engine and its capability fleet (forms, email, signatures, phone, documents, access, workflow).',
@@ -56,6 +57,20 @@ export default defineConfig({
           { text: 'Authentication & Authorization', link: '/concepts/auth' },
           { text: 'Multi-Tenancy', link: '/concepts/tenancy' },
           { text: 'Deployment Topology', link: '/concepts/deployment' },
+        ],
+      },
+      {
+        text: 'Capability Deep-Dives',
+        collapsed: false,
+        items: [
+          { text: 'Forms', link: '/capabilities/forms' },
+          { text: 'Email', link: '/capabilities/email' },
+          { text: 'Signatures', link: '/capabilities/signatures' },
+          { text: 'Phone (Voice)', link: '/capabilities/phone' },
+          { text: 'Documents', link: '/capabilities/documents' },
+          { text: 'Access Management', link: '/capabilities/access' },
+          { text: 'Calendars & SLA', link: '/capabilities/calendar' },
+          { text: 'Workflow', link: '/capabilities/workflow' },
         ],
       },
       {
@@ -120,4 +135,4 @@ export default defineConfig({
       copyright: 'Internal engineering documentation — Lukeflow',
     },
   },
-})
+}))
