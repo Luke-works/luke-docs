@@ -10,6 +10,12 @@ Lukeflow [Headless Libraries](/libraries/forms) as vendored, pre-built dist.
 
 > **Repository:** `luke-consumer-ui` · **Type:** Application · **Stack:** React 19 / Vite 6 / TypeScript / Tailwind v4
 
+::: tip Looking for the click-paths?
+For the end-to-end **user journeys** through this app — sign-in, building & publishing a form,
+embedding it, sending for signature, requesting access, etc., each with a diagram — see
+**[Consumer UI — User Action Flows](/apps/consumer-ui-flows)**.
+:::
+
 ## Overview
 
 Lukeflow describes itself as "an orchestrator for a better future." The Consumer

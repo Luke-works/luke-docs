@@ -98,6 +98,7 @@ export default withMermaid(defineConfig({
         collapsed: false,
         items: [
           { text: 'Consumer UI', link: '/apps/consumer-ui' },
+          { text: 'Consumer UI — User Flows', link: '/apps/consumer-ui-flows' },
           { text: 'Core UI (Cockpit)', link: '/apps/core-ui' },
           { text: 'Marketing Site', link: '/apps/marketing-ui' },
         ],
