@@ -49,9 +49,11 @@ touching every axis:
   off the EOL line (#41); session-cache **single-flight** against upstream stampedes (#34);
   a **liveness/readiness split** with dependency probes + graceful drain, health-checked on
   liveness so a downstream blip can't restart the gateway (#26); a central `SecurityFilterChain`
-  with consistent security headers (#29, headers done; enforcement migration staged); and a
-  signature-verified **WorkOS deprovisioning webhook** that drops a removed user's cached session
-  at once (#38, partial). Tests **75 → 110**. CI/CD **85 → 90**, Hardening **92 → 95**, Docs
+  that is **authenticated-by-default** behind a canonicalization-aware allowlist, with a WorkOS
+  auth filter + consistent security headers (#29); and a signature-verified **WorkOS
+  deprovisioning webhook** that, on `user.deleted`, invalidates the cached session *and* removes
+  the engine membership via a new core-engine operator endpoint (#38 — only Directory-Sync
+  mapping remains). Tests **75 → 120**. CI/CD **85 → 90**, Hardening **92 → 95**, Docs
   **82 → 91**, Tests **85 → 90**.
 
 An earlier hardening pass lifted four components toward production-ready:
@@ -97,10 +99,9 @@ enforceable gates as forms/email.
    hard to test under jsdom + react-pdf / react-flow) and broaden **luke-core-ui** e2e.
 2. Push **luke-lists** / **luke-analytics** to GitHub (local-only today) so they get CI + the gates.
 3. Decide **luke-task-engine**'s fate — archive or delete (superseded, dead weight).
-4. Finish the two staged **auth-engine** items: migrate auth enforcement into the
-   `SecurityFilterChain` behind a canonicalizing matcher + a live-WorkOS integration test (#29),
-   and wire the deprovisioning webhook through to engine-membership removal + token revocation
-   once the operator-endpoint / WorkOS Directory Sync decision lands (#38).
+4. Enable **WorkOS Directory Sync** for a pilot tenant so auth-engine's deprovisioning webhook
+   can act on `dsync.*` deactivations — the only remaining piece of #38 (the `user.deleted`
+   leaver loop and the central-enforcement migration of #29 both shipped).
 
 ::: info Method
 Scores come from an evidence-based audit of each repo (README, build files, CI, test counts,

@@ -61,11 +61,11 @@ Hardening is layered so dev/qa stay lenient while prod fails fast on any missing
 - **Service-key hashing + live revocation** — service keys may be stored SHA-256-hashed at rest, carry `;exp=` self-expiry and `;scope=` metadata, and be revoked live via `POST /service/keys/{keyId}/revoke` with an operator token (no redeploy).
 - **XFF trusted-proxy-hops** — client IP is resolved from `X-Forwarded-For` honoring a configured number of trusted reverse-proxy hops, so a spoofed prepended header can't fool the rate limiter or audit source IP.
 - **Key rotation with overlap** — a previous public key can be published in the JWKS alongside the current one, so tokens signed by either `kid` verify during a zero-downtime rotation window (see `docs/key-rotation.md`).
-- **Central security headers** — one `SecurityFilterChain` applies `X-Content-Type-Options: nosniff`, HSTS and `Referrer-Policy: no-referrer` on every response (frame-options deliberately left off so the public embed page stays iframable under its per-tenant `frame-ancestors` CSP).
+- **Authenticated-by-default** — one `SecurityFilterChain` requires authentication for every request except an explicit, canonicalization-aware public allowlist, so a new endpoint is protected even if its author forgets a check. A `WorkosAuthenticationFilter` verifies the WorkOS Bearer (and dev-mode `X-Dev-User`) into the security context. It also applies consistent security headers (`X-Content-Type-Options: nosniff`, HSTS, `Referrer-Policy: no-referrer`); frame-options are deliberately left off so the public embed page stays iframable under its per-tenant `frame-ancestors` CSP.
 - **Liveness/readiness split** — `/actuator/health/liveness` reflects only "is the process alive" (Render health-checks this, so a downstream blip can't restart the gateway); `/actuator/health/readiness` reflects the WorkOS verifier, signing key and core-engine reachability (cached, non-blocking). Graceful shutdown drains in-flight proxied requests.
 - **Session single-flight** — concurrent misses (and `fresh=true` bypasses) for the same `(user, tenant)` collapse into one upstream computation, so a thundering herd after a cache-emptying deploy can't storm core-engine.
 - **Supply-chain gate** — digest-pinned base images, a per-build CycloneDX SBOM and a gating Trivy CVE scan (fails on fixable HIGH/CRITICAL), kept current by Dependabot.
-- **Deprovisioning webhook** — a signature-verified WorkOS webhook (`/webhooks/workos`) drops a removed user's cached authorization immediately (engine-membership removal + token revocation staged — see Status).
+- **Deprovisioning webhook** — a signature-verified WorkOS webhook (`/webhooks/workos`); on `user.deleted` it invalidates the removed user's cached authorization *and* calls core-engine's operator `deprovision-user` to strip their engine membership (retried via 500 if core is briefly unreachable). Directory-Sync (`dsync.*`) events await the WorkOS Directory Sync setup.
 
 ## Technology
 
@@ -122,7 +122,7 @@ To wire the engine side, set `LUKE_AUTH_GATEWAY_ENABLED=true` and point `LUKE_AU
 Production-ready and deployed. Known items:
 
 - **In-memory, per-instance rate limiting.** The credential/token rate limiter keeps its counters in process memory, so limits are enforced **per instance** and reset on restart. A single instance (or sticky routing) is fine; horizontal scale-out would want a shared store to enforce a global limit.
-- **Two deliberately-staged hardening items.** The central `SecurityFilterChain` applies security headers today but authorization enforcement still lives in the controllers — migrating it into the chain requires a canonicalizing request matcher (to preserve the path-traversal defense) and a live-WorkOS integration test (#29). The WorkOS deprovisioning webhook invalidates a removed user's session cache immediately, but engine-membership removal + token revocation await an operator-endpoint / WorkOS Directory Sync decision (#38).
+- **Directory Sync (`dsync.*`) events** are acknowledged but not yet acted on — the directory-user→platform-user mapping depends on enabling WorkOS Directory Sync (a paid capability) for the tenant. Once enabled, deactivation events reuse the same deprovisioning path as `user.deleted`. Tracked in #38.
 
 > The former stale-Clerk documentation gap is **resolved**, and a supply-chain gate (digest-pinned bases, SBOM, gating CVE scan) now backs the image — its first run caught real CRITICAL RCEs and drove a Spring Boot 3.4.13→3.5.16 bump off the EOL line.
 

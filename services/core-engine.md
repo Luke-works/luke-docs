@@ -67,6 +67,7 @@ The outbox guarantees the capability's data commit and the "notify the process e
 - **In-process capability data layer** — forms, email, signatures, phone, documents, access, secrets and more (see table above).
 - **Transactional outbox write-back** — capabilities drive BPMN processes durably (see above).
 - **Connectors & scripting** — FluxNova Connect (HTTP/SOAP service tasks) plus JSR-223 scripting engines (GraalVM JS, Groovy, Jython) for BPMN logic.
+- **User lifecycle (operator + self-service)** — `POST /api/admin/onboard-user` provisions a user into a tenant/role, and `POST /api/admin/deprovision-user` revokes all of a user's access (memberships, the user, capability grants, any sole-owned tenant) — the operator/IdP counterpart to the user's own `DELETE /api/me/account`, sharing one `UserDeprovisioningService` so the cleanup can't drift. luke-auth-engine's WorkOS deprovisioning webhook calls it on IdP leaver events.
 - **Fail-fast security guards** — a set of `@PostConstruct` guards refuse to boot (or warn loudly) on insecure configuration (see [Deployment](#deployment)).
 - **Correlation IDs & health probes** — `CorrelationIdFilter` for request tracing; Spring Boot Actuator liveness/readiness endpoints for Render.
 
