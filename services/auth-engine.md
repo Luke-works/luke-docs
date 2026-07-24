@@ -61,21 +61,26 @@ Hardening is layered so dev/qa stay lenient while prod fails fast on any missing
 - **Service-key hashing + live revocation** — service keys may be stored SHA-256-hashed at rest, carry `;exp=` self-expiry and `;scope=` metadata, and be revoked live via `POST /service/keys/{keyId}/revoke` with an operator token (no redeploy).
 - **XFF trusted-proxy-hops** — client IP is resolved from `X-Forwarded-For` honoring a configured number of trusted reverse-proxy hops, so a spoofed prepended header can't fool the rate limiter or audit source IP.
 - **Key rotation with overlap** — a previous public key can be published in the JWKS alongside the current one, so tokens signed by either `kid` verify during a zero-downtime rotation window (see `docs/key-rotation.md`).
+- **Central security headers** — one `SecurityFilterChain` applies `X-Content-Type-Options: nosniff`, HSTS and `Referrer-Policy: no-referrer` on every response (frame-options deliberately left off so the public embed page stays iframable under its per-tenant `frame-ancestors` CSP).
+- **Liveness/readiness split** — `/actuator/health/liveness` reflects only "is the process alive" (Render health-checks this, so a downstream blip can't restart the gateway); `/actuator/health/readiness` reflects the WorkOS verifier, signing key and core-engine reachability (cached, non-blocking). Graceful shutdown drains in-flight proxied requests.
+- **Session single-flight** — concurrent misses (and `fresh=true` bypasses) for the same `(user, tenant)` collapse into one upstream computation, so a thundering herd after a cache-emptying deploy can't storm core-engine.
+- **Supply-chain gate** — digest-pinned base images, a per-build CycloneDX SBOM and a gating Trivy CVE scan (fails on fixable HIGH/CRITICAL), kept current by Dependabot.
+- **Deprovisioning webhook** — a signature-verified WorkOS webhook (`/webhooks/workos`) drops a removed user's cached authorization immediately (engine-membership removal + token revocation staged — see Status).
 
 ## Technology
 
 | Concern | Choice |
 |---------|--------|
 | Language / runtime | Java 21 |
-| Framework | Spring Boot 3.4.13 (`spring-boot-starter-web`, `-actuator`) |
+| Framework | Spring Boot 3.5.16 (`-web`, `-actuator`, `-security`, `-validation`) |
 | JWT / JOSE | `spring-security-oauth2-jose` (Nimbus) — verify WorkOS tokens, mint/sign act-as tokens |
 | Authentication provider | WorkOS User Management (login flows + JWKS verification) |
 | Persistence | **None** — stateless gateway |
 | Build | Maven (wrapper), packaged as a fat jar |
-| Container | Multi-stage Dockerfile (Temurin 21 JRE, non-root, container-aware JVM sizing) |
-| CI | GitHub Actions — `mvnw verify` on every PR / push to `develop`; separate Semgrep + gitleaks + Trivy security scan |
-| Size | ~28 Java source files, ~92 tests (JUnit / Spring Boot Test) |
-| Docs | README + `docs/` — `API.md` (HTTP surface), `CONFIGURATION.md` (every setting + prod checklist), `ERRORS.md` (error contract), `AUTHZ-DESIGN.md`, `key-rotation.md`, `AUDIT.md` |
+| Container | Multi-stage Dockerfile — **digest-pinned** Temurin 21 JRE base, non-root, container-aware JVM sizing |
+| CI | GitHub Actions — `mvnw verify` on every PR / push to `develop`; a gating **image job** (build → CycloneDX SBOM → Trivy CVE scan, fails on fixable HIGH/CRITICAL); Dependabot; separate Semgrep + gitleaks + Trivy security scan |
+| Size | ~34 Java source files, ~110 tests (JUnit / Spring Boot Test) |
+| Docs | README + `docs/` — `API.md`, `CONFIGURATION.md`, `ERRORS.md`, `SUPPLY-CHAIN.md`, `DEPROVISIONING.md`, `AUTHZ-DESIGN.md`, `key-rotation.md`, `AUDIT.md` |
 
 ## Local development
 
@@ -114,10 +119,11 @@ To wire the engine side, set `LUKE_AUTH_GATEWAY_ENABLED=true` and point `LUKE_AU
 
 ## Status & gaps
 
-Production-ready and deployed. One known item to be aware of:
+Production-ready and deployed. Known items:
 
 - **In-memory, per-instance rate limiting.** The credential/token rate limiter keeps its counters in process memory, so limits are enforced **per instance** and reset on restart. A single instance (or sticky routing) is fine; horizontal scale-out would want a shared store to enforce a global limit.
+- **Two deliberately-staged hardening items.** The central `SecurityFilterChain` applies security headers today but authorization enforcement still lives in the controllers — migrating it into the chain requires a canonicalizing request matcher (to preserve the path-traversal defense) and a live-WorkOS integration test (#29). The WorkOS deprovisioning webhook invalidates a removed user's session cache immediately, but engine-membership removal + token revocation await an operator-endpoint / WorkOS Directory Sync decision (#38).
 
-> The former stale-Clerk documentation gap is **resolved** — the README, config comments, and `pom.xml` are fully WorkOS, and a new `docs/API.md` + `docs/CONFIGURATION.md` document the HTTP surface and every setting.
+> The former stale-Clerk documentation gap is **resolved**, and a supply-chain gate (digest-pinned bases, SBOM, gating CVE scan) now backs the image — its first run caught real CRITICAL RCEs and drove a Spring Boot 3.4.13→3.5.16 bump off the EOL line.
 
 For how this service scores against the broader platform readiness checklist, see the [Completeness Scorecard](/reference/completeness).

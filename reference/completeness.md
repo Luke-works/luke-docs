@@ -14,7 +14,7 @@ elsewhere in the manual.
 | --- | --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | --- |
 | 1 | [luke-forms](/libraries/forms) | 95 | 95 | 98 | 90 | 92 | 96 | **94** | <span class="pill ready">Ready</span> |
 | 2 | [luke-email](/libraries/email) | 90 | 91 | 94 | 92 | 93 | 92 | **93** | <span class="pill lib">Library</span> |
-| 3 | [luke-auth-engine](/services/auth-engine) | 90 | 89 | 87 | 90 | 85 | 94 | **89** | <span class="pill ready">Ready</span> |
+| 3 | [luke-auth-engine](/services/auth-engine) | 90 | 90 | 90 | 91 | 90 | 95 | **91** | <span class="pill ready">Ready</span> |
 | 4 | [luke-agents](/services/agents) | 89 | 88 | 85 | 88 | 90 | 88 | **88** | <span class="pill ready">Ready</span> |
 | 5 | [luke-core-engine](/services/core-engine) | 90 | 88 | 86 | 83 | 89 | 91 | **88** | <span class="pill partial">Partial</span> |
 | 6 | [luke-platform](/operations/platform) | 88 | 88 | 82 | 90 | 85 | 91 | **88** | <span class="pill partial">Partial</span> |
@@ -35,15 +35,24 @@ elsewhere in the manual.
 **Fleet average overall ≈ 80%.**
 
 ::: tip Recent uplifts
-An auth-engine enterprise-hardening pass lifted it 88 → **89** (now #3, ahead of the
-88-tier):
+An eight-issue enterprise-hardening pass lifted auth-engine 88 → **91** (now a clear #3),
+touching every axis:
 
-- **[luke-auth-engine](/services/auth-engine)** 88 → **89** — one sanitized RFC 7807 error
-  boundary that stops raw upstream/exception messages (internal URIs, signing-key internals)
-  reaching clients (#37); typed `@Validated` config with a comprehensive prod fail-fast guard —
-  WorkOS creds, strict validation, stable key, non-local CORS, dev-mode-off (#35); and a full
-  docs refresh — README rewrite plus new `API.md` / `CONFIGURATION.md` / `ERRORS.md`, retiring
-  the stale-Clerk gap (#28). Tests 75 → 92. Docs **82 → 90**, Hardening **92 → 94**.
+- **[luke-auth-engine](/services/auth-engine)** 88 → **91** —
+  a sanitized RFC 7807 error boundary that stops raw upstream/exception detail (internal URIs,
+  signing-key internals) reaching clients (#37); typed `@Validated` config with a comprehensive
+  prod fail-fast guard — WorkOS creds, strict validation, stable key, non-local CORS,
+  dev-mode-off (#35); a full docs refresh — README rewrite plus `API.md` / `CONFIGURATION.md` /
+  `ERRORS.md` / `SUPPLY-CHAIN.md` / `DEPROVISIONING.md`, retiring the stale-Clerk gap (#28);
+  a **supply-chain gate** — digest-pinned bases, per-build CycloneDX SBOM, a gating Trivy image
+  scan and Dependabot, which caught real CRITICAL RCEs and drove a Spring Boot 3.4.13→3.5.16 bump
+  off the EOL line (#41); session-cache **single-flight** against upstream stampedes (#34);
+  a **liveness/readiness split** with dependency probes + graceful drain, health-checked on
+  liveness so a downstream blip can't restart the gateway (#26); a central `SecurityFilterChain`
+  with consistent security headers (#29, headers done; enforcement migration staged); and a
+  signature-verified **WorkOS deprovisioning webhook** that drops a removed user's cached session
+  at once (#38, partial). Tests **75 → 110**. CI/CD **85 → 90**, Hardening **92 → 95**, Docs
+  **82 → 91**, Tests **85 → 90**.
 
 An earlier hardening pass lifted four components toward production-ready:
 
@@ -88,8 +97,10 @@ enforceable gates as forms/email.
    hard to test under jsdom + react-pdf / react-flow) and broaden **luke-core-ui** e2e.
 2. Push **luke-lists** / **luke-analytics** to GitHub (local-only today) so they get CI + the gates.
 3. Decide **luke-task-engine**'s fate — archive or delete (superseded, dead weight).
-4. Supply-chain hardening on **luke-auth-engine**'s Docker image (digest-pinned bases, SBOM,
-   image scan) — the one axis (CI/CD 85) still holding it below the 90s.
+4. Finish the two staged **auth-engine** items: migrate auth enforcement into the
+   `SecurityFilterChain` behind a canonicalizing matcher + a live-WorkOS integration test (#29),
+   and wire the deprovisioning webhook through to engine-membership removal + token revocation
+   once the operator-endpoint / WorkOS Directory Sync decision lands (#38).
 
 ::: info Method
 Scores come from an evidence-based audit of each repo (README, build files, CI, test counts,
