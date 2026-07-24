@@ -14,7 +14,7 @@ elsewhere in the manual.
 | --- | --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | --- |
 | 1 | [luke-forms](/libraries/forms) | 95 | 95 | 98 | 90 | 92 | 96 | **94** | <span class="pill ready">Ready</span> |
 | 2 | [luke-email](/libraries/email) | 90 | 91 | 94 | 92 | 93 | 92 | **93** | <span class="pill lib">Library</span> |
-| 3 | [luke-auth-engine](/services/auth-engine) | 90 | 90 | 90 | 91 | 90 | 95 | **91** | <span class="pill ready">Ready</span> |
+| 3 | [luke-auth-engine](/services/auth-engine) | 90 | 92 | 94 | 94 | 90 | 97 | **93** | <span class="pill ready">Ready</span> |
 | 4 | [luke-agents](/services/agents) | 89 | 88 | 85 | 88 | 90 | 88 | **88** | <span class="pill ready">Ready</span> |
 | 5 | [luke-core-engine](/services/core-engine) | 90 | 88 | 86 | 83 | 89 | 91 | **88** | <span class="pill partial">Partial</span> |
 | 6 | [luke-platform](/operations/platform) | 88 | 88 | 82 | 90 | 85 | 91 | **88** | <span class="pill partial">Partial</span> |
@@ -35,8 +35,16 @@ elsewhere in the manual.
 **Fleet average overall ≈ 80%.**
 
 ::: tip Recent uplifts
-An eight-issue enterprise-hardening pass lifted auth-engine 88 → **91** (now a clear #3),
-touching every axis:
+Two successive passes lifted auth-engine 88 → **93** (now tied for #2). A second,
+"path-to-best-in-fleet" pass added: a shared **Redis rate limiter** (global cross-replica cap,
+in-memory fallback) closing the per-instance limit gap (#56); a real **end-to-end JWKS
+verification** test (signed token → NimbusJwtDecoder → filter → chain, no live WorkOS) that also
+**caught and fixed a latent proxy bug** — the `Upgrade` header 500'd every request from a client
+that sent it (#57); a **typed ratelimit config** consolidation (#58); and a machine-readable
+**OpenAPI** doc at `/v3/api-docs` (#59). Hardening **95 → 97**, Tests **90 → 94** (134 tests),
+Docs **91 → 94**.
+
+The first, eight-issue pass lifted it 88 → **91**, touching every axis:
 
 - **[luke-auth-engine](/services/auth-engine)** 88 → **91** —
   a sanitized RFC 7807 error boundary that stops raw upstream/exception detail (internal URIs,

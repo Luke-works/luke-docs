@@ -55,7 +55,7 @@ Hardening is layered so dev/qa stay lenient while prod fails fast on any missing
 - **Typed, validated config** — every `luke.auth.*` / `luke.cors.*` setting binds to `@Validated` `@ConfigurationProperties` (`LukeAuthProperties`, `LukeCorsProperties`), the single source of truth the guard reads. `docs/CONFIGURATION.md` lists every setting, default, and prod requirement.
 - **Sanitized error boundary** — one `@RestControllerAdvice` maps every exception to an RFC 7807 `application/problem+json` body (with legacy `error`/`message` keys the UI reads) and a correlation id. Internal detail — upstream URIs, hostnames, stack messages, signing-key internals — is logged, never returned; WorkOS's own user-facing 4xx text passes through. See `docs/ERRORS.md`.
 - **Require-stable-key prod guard** — `GATEWAY_REQUIRE_STABLE_KEY=true` forbids the ephemeral-key fallback, so a prod restart never silently rotates the engine's trust anchor.
-- **Per-IP rate limiting** — a fixed-window limiter over the credential/token endpoints (`/auth/login`, `/auth/register`, `/auth/password`, `/service/token`), keyed by client IP + path.
+- **Per-IP rate limiting** — a fixed-window limiter over the credential/token endpoints (`/auth/login`, `/auth/register`, `/auth/password`, `/service/token`), keyed by client IP + path. Set `REDIS_URL` to enforce the limit **globally across replicas** (shared Redis store); unset ⇒ in-memory per-instance, and a Redis blip degrades to in-memory rather than failing.
 - **Correlation-id filter** — tags every log line (MDC `correlationId`) and forwards the id to Core Engine so a trace spans the gateway hop.
 - **Audit logger** — privileged/auth events on a dedicated `luke.audit` logger, always emitted at INFO for a filterable trail.
 - **Service-key hashing + live revocation** — service keys may be stored SHA-256-hashed at rest, carry `;exp=` self-expiry and `;scope=` metadata, and be revoked live via `POST /service/keys/{keyId}/revoke` with an operator token (no redeploy).
@@ -79,7 +79,8 @@ Hardening is layered so dev/qa stay lenient while prod fails fast on any missing
 | Build | Maven (wrapper), packaged as a fat jar |
 | Container | Multi-stage Dockerfile — **digest-pinned** Temurin 21 JRE base, non-root, container-aware JVM sizing |
 | CI | GitHub Actions — `mvnw verify` on every PR / push to `develop`; a gating **image job** (build → CycloneDX SBOM → Trivy CVE scan, fails on fixable HIGH/CRITICAL); Dependabot; separate Semgrep + gitleaks + Trivy security scan |
-| Size | ~34 Java source files, ~110 tests (JUnit / Spring Boot Test) |
+| Size | ~40 Java source files, ~134 tests (JUnit / Spring Boot Test, incl. end-to-end JWKS + embedded-Redis) |
+| API spec | OpenAPI at `/v3/api-docs` (springdoc, JSON-only) |
 | Docs | README + `docs/` — `API.md`, `CONFIGURATION.md`, `ERRORS.md`, `SUPPLY-CHAIN.md`, `DEPROVISIONING.md`, `AUTHZ-DESIGN.md`, `key-rotation.md`, `AUDIT.md` |
 
 ## Local development
@@ -121,7 +122,7 @@ To wire the engine side, set `LUKE_AUTH_GATEWAY_ENABLED=true` and point `LUKE_AU
 
 Production-ready and deployed. Known items:
 
-- **In-memory, per-instance rate limiting.** The credential/token rate limiter keeps its counters in process memory, so limits are enforced **per instance** and reset on restart. A single instance (or sticky routing) is fine; horizontal scale-out would want a shared store to enforce a global limit.
+- **Rate limiting is global when `REDIS_URL` is set, per-instance otherwise.** The shared Redis store enforces the credential-endpoint limit across all replicas; without it, limits are per-instance (fine for a single instance / sticky routing). Provisioning Redis + setting `REDIS_URL` is the remaining ops step to switch it on in prod.
 - **Directory Sync (`dsync.*`) events** are acknowledged but not yet acted on — the directory-user→platform-user mapping depends on enabling WorkOS Directory Sync (a paid capability) for the tenant. Once enabled, deactivation events reuse the same deprovisioning path as `user.deleted`. Tracked in #38.
 
 > The former stale-Clerk documentation gap is **resolved**, and a supply-chain gate (digest-pinned bases, SBOM, gating CVE scan) now backs the image — its first run caught real CRITICAL RCEs and drove a Spring Boot 3.4.13→3.5.16 bump off the EOL line.
