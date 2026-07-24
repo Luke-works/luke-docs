@@ -32,7 +32,8 @@ Each module owns its own tables (Flyway-managed) and REST surface. Modules are w
 
 | Module | Package | Responsibility |
 |---|---|---|
-| **form** | `capability/form`, `form` | Form definitions, versions, submissions, embed tokens, event rail, submission PDFs |
+| **form** | `capability/form`, `form` | Form definitions, versions, submissions, embed tokens, event rail, submission PDFs, outbound send; contributes to the recipient portal via `FormRecipientItemProvider` |
+| **recipient** | `recipient` | Capability-agnostic recipient **portal** identity — per-tenant, account-less, authenticate-once (email/SMS-OTP + magic link), email-scoped sessions; aggregates open items across capabilities via the `RecipientItemProvider` SPI (front-end: **luke-portal**) |
 | **email** | `capability/email` | Email capability data layer |
 | **emailtemplate** | `capability/emailtemplate` | Bounded email-template documents / assets |
 | **phone** | `capability/phone` | Vapi.ai inbound/outbound voice-call records and webhooks |
