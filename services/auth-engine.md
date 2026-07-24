@@ -51,7 +51,9 @@ The act-as-user token is **stateless and per-request** — there is nothing to s
 Hardening is layered so dev/qa stay lenient while prod fails fast on any missing guard:
 
 - **`DevModeGuard`** — dev-mode (the `X-Dev-User` header / `/dev/token` backdoor) requires the `dev` Spring profile. The app refuses to boot if dev-mode is on without it, so a single stray env var can't open the backdoor in prod.
-- **`AuthHardeningGuard`** — under the `prod` profile (or `luke.auth.require-hardened=true`) the app refuses to start unless **both** strict WorkOS validation and a stable signing key are enforced.
+- **`AuthHardeningGuard`** — under the `prod` profile (or `luke.auth.require-hardened=true`) the app refuses to start unless **all** production invariants hold: WorkOS credentials present, strict WorkOS validation on (with issuer + audience), a stable signing key, non-localhost/non-wildcard CORS, and dev-mode off. dev/qa without the profile stay lenient.
+- **Typed, validated config** — every `luke.auth.*` / `luke.cors.*` setting binds to `@Validated` `@ConfigurationProperties` (`LukeAuthProperties`, `LukeCorsProperties`), the single source of truth the guard reads. `docs/CONFIGURATION.md` lists every setting, default, and prod requirement.
+- **Sanitized error boundary** — one `@RestControllerAdvice` maps every exception to an RFC 7807 `application/problem+json` body (with legacy `error`/`message` keys the UI reads) and a correlation id. Internal detail — upstream URIs, hostnames, stack messages, signing-key internals — is logged, never returned; WorkOS's own user-facing 4xx text passes through. See `docs/ERRORS.md`.
 - **Require-stable-key prod guard** — `GATEWAY_REQUIRE_STABLE_KEY=true` forbids the ephemeral-key fallback, so a prod restart never silently rotates the engine's trust anchor.
 - **Per-IP rate limiting** — a fixed-window limiter over the credential/token endpoints (`/auth/login`, `/auth/register`, `/auth/password`, `/service/token`), keyed by client IP + path.
 - **Correlation-id filter** — tags every log line (MDC `correlationId`) and forwards the id to Core Engine so a trace spans the gateway hop.
@@ -72,7 +74,8 @@ Hardening is layered so dev/qa stay lenient while prod fails fast on any missing
 | Build | Maven (wrapper), packaged as a fat jar |
 | Container | Multi-stage Dockerfile (Temurin 21 JRE, non-root, container-aware JVM sizing) |
 | CI | GitHub Actions — `mvnw verify` on every PR / push to `develop`; separate Semgrep + gitleaks + Trivy security scan |
-| Size | ~25 Java source files, ~75 tests (JUnit / Spring Boot Test) |
+| Size | ~28 Java source files, ~92 tests (JUnit / Spring Boot Test) |
+| Docs | README + `docs/` — `API.md` (HTTP surface), `CONFIGURATION.md` (every setting + prod checklist), `ERRORS.md` (error contract), `AUTHZ-DESIGN.md`, `key-rotation.md`, `AUDIT.md` |
 
 ## Local development
 
@@ -111,9 +114,10 @@ To wire the engine side, set `LUKE_AUTH_GATEWAY_ENABLED=true` and point `LUKE_AU
 
 ## Status & gaps
 
-Production-ready and deployed. Two known items to be aware of:
+Production-ready and deployed. One known item to be aware of:
 
-- **Stale Clerk reference in the README.** The top of `README.md` still describes the flow in terms of **Clerk** (`clerk:<sub>` subjects, `CLERK_*` env vars), but the code and `application.yml` are fully on **WorkOS** — the `pom.xml` description, config, and verifier all reflect WorkOS. This is a documentation lag, not a behavioral one; the running service verifies WorkOS tokens.
 - **In-memory, per-instance rate limiting.** The credential/token rate limiter keeps its counters in process memory, so limits are enforced **per instance** and reset on restart. A single instance (or sticky routing) is fine; horizontal scale-out would want a shared store to enforce a global limit.
+
+> The former stale-Clerk documentation gap is **resolved** — the README, config comments, and `pom.xml` are fully WorkOS, and a new `docs/API.md` + `docs/CONFIGURATION.md` document the HTTP surface and every setting.
 
 For how this service scores against the broader platform readiness checklist, see the [Completeness Scorecard](/reference/completeness).

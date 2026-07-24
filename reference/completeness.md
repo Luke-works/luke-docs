@@ -14,8 +14,8 @@ elsewhere in the manual.
 | --- | --- | :-: | :-: | :-: | :-: | :-: | :-: | :-: | --- |
 | 1 | [luke-forms](/libraries/forms) | 95 | 95 | 98 | 90 | 92 | 96 | **94** | <span class="pill ready">Ready</span> |
 | 2 | [luke-email](/libraries/email) | 90 | 91 | 94 | 92 | 93 | 92 | **93** | <span class="pill lib">Library</span> |
-| 3 | [luke-agents](/services/agents) | 89 | 88 | 85 | 88 | 90 | 88 | **88** | <span class="pill ready">Ready</span> |
-| 4 | [luke-auth-engine](/services/auth-engine) | 90 | 88 | 85 | 82 | 85 | 92 | **88** | <span class="pill ready">Ready</span> |
+| 3 | [luke-auth-engine](/services/auth-engine) | 90 | 89 | 87 | 90 | 85 | 94 | **89** | <span class="pill ready">Ready</span> |
+| 4 | [luke-agents](/services/agents) | 89 | 88 | 85 | 88 | 90 | 88 | **88** | <span class="pill ready">Ready</span> |
 | 5 | [luke-core-engine](/services/core-engine) | 90 | 88 | 86 | 83 | 89 | 91 | **88** | <span class="pill partial">Partial</span> |
 | 6 | [luke-platform](/operations/platform) | 88 | 88 | 82 | 90 | 85 | 91 | **88** | <span class="pill partial">Partial</span> |
 | 7 | [luke-file-proxy](/services/file-proxy) | 85 | 88 | 62 | 80 | 80 | 87 | **85** | <span class="pill partial">Partial</span> |
@@ -32,10 +32,20 @@ elsewhere in the manual.
 *Not scored: `luke-capability-engine`, `luke-signature-engine` — empty shells merged into
 [core-engine](/services/core-engine).*
 
-**Fleet average overall ≈ 78%.**
+**Fleet average overall ≈ 80%.**
 
 ::: tip Recent uplifts
-A hardening pass lifted four components toward production-ready:
+An auth-engine enterprise-hardening pass lifted it 88 → **89** (now #3, ahead of the
+88-tier):
+
+- **[luke-auth-engine](/services/auth-engine)** 88 → **89** — one sanitized RFC 7807 error
+  boundary that stops raw upstream/exception messages (internal URIs, signing-key internals)
+  reaching clients (#37); typed `@Validated` config with a comprehensive prod fail-fast guard —
+  WorkOS creds, strict validation, stable key, non-local CORS, dev-mode-off (#35); and a full
+  docs refresh — README rewrite plus new `API.md` / `CONFIGURATION.md` / `ERRORS.md`, retiring
+  the stale-Clerk gap (#28). Tests 75 → 92. Docs **82 → 90**, Hardening **92 → 94**.
+
+An earlier hardening pass lifted four components toward production-ready:
 
 - **[luke-email](/libraries/email)** 87 → **93** — public-API-surface guard + size budget in CI,
   property/fuzz + injection-safety tests (`email-core` 39 → 66 tests), full docs suite. Now #2.
@@ -76,9 +86,10 @@ enforceable gates as forms/email.
 
 1. Test coverage on the **React layers** of luke-signatures / luke-workflow (~2k LOC each,
    hard to test under jsdom + react-pdf / react-flow) and broaden **luke-core-ui** e2e.
-2. Refresh the stale **Clerk → WorkOS** mention in **luke-auth-engine**'s README.
-3. Push **luke-lists** / **luke-analytics** to GitHub (local-only today) so they get CI + the gates.
-4. Decide **luke-task-engine**'s fate — archive or delete (superseded, dead weight).
+2. Push **luke-lists** / **luke-analytics** to GitHub (local-only today) so they get CI + the gates.
+3. Decide **luke-task-engine**'s fate — archive or delete (superseded, dead weight).
+4. Supply-chain hardening on **luke-auth-engine**'s Docker image (digest-pinned bases, SBOM,
+   image scan) — the one axis (CI/CD 85) still holding it below the 90s.
 
 ::: info Method
 Scores come from an evidence-based audit of each repo (README, build files, CI, test counts,
