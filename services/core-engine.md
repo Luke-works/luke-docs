@@ -16,14 +16,14 @@ Collapsing the former standalone `luke-capability-engine` into the process engin
 See [Capabilities](/concepts/capabilities), [Multi-Tenancy](/concepts/tenancy), and [Authentication & Authorization](/concepts/auth) for the platform-wide concepts this service implements.
 
 ::: info At a glance
-~53 REST controllers · ~27 services · ~274 endpoint mappings · 16 Flyway migrations (V1–V16) · ~409 tests.
+~53 REST controllers · ~28 services · ~274 endpoint mappings · 17 Flyway migrations (V1–V17) · ~423 tests.
 :::
 
 ## Architecture
 
 The service is a single Spring Boot application (`LukeCoreEngineApplication`) that boots the FluxNova engine and registers the capability modules alongside it. Two concerns run in the same process and share one PostgreSQL database:
 
-- **The engine tier** — FluxNova BPMN runtime, the Camunda REST API, identity/authorization, tenant filters, and connector/scripting plugins.
+- **The engine tier** — FluxNova BPMN runtime, the Camunda REST API, identity/authorization, tenant filters, and connector plugins.
 - **The capability tier** — domain modules under `com.luke.engine.capability.*` (plus top-level `form`, `document`, `emailasset`, `workflow`) that persist and serve capability data.
 
 ### Capability modules
@@ -66,7 +66,8 @@ The outbox guarantees the capability's data commit and the "notify the process e
 - **Gateway JWT authentication** — `GatewayJwtAuthenticator` verifies short-lived JWTs signed by the consumer gateway against a configured JWKS URL (opt-in via `luke.auth.gateway.enabled`).
 - **In-process capability data layer** — forms, email, signatures, phone, documents, access, secrets and more (see table above).
 - **Transactional outbox write-back** — capabilities drive BPMN processes durably (see above).
-- **Connectors & scripting** — FluxNova Connect (HTTP/SOAP service tasks) plus JSR-223 scripting engines (GraalVM JS, Groovy, Jython) for BPMN logic.
+- **Connectors** — FluxNova Connect (HTTP/SOAP service tasks) for BPMN service-task integration. (The JSR-223 scripting engines were removed in #22 to cut the container's off-heap footprint — no BPMN used them; re-add one engine if script tasks are ever needed.)
+- **Data retention & PII expiry** — an opt-in scheduled job (`luke.retention.*`, off by default, dry-run-first) deletes/anonymizes PII trails past per-class windows: email sends, form-submission payloads, form audit events, and terminal OTP challenges. Tenant deletion cascades the same trails (right-to-erasure). See the repo's `docs/runbooks/data-retention.md`.
 - **User lifecycle (operator + self-service)** — `POST /api/admin/onboard-user` provisions a user into a tenant/role, and `POST /api/admin/deprovision-user` revokes all of a user's access (memberships, the user, capability grants, any sole-owned tenant) — the operator/IdP counterpart to the user's own `DELETE /api/me/account`, sharing one `UserDeprovisioningService` so the cleanup can't drift. luke-auth-engine's WorkOS deprovisioning webhook calls it on IdP leaver events.
 - **Fail-fast security guards** — a set of `@PostConstruct` guards refuse to boot (or warn loudly) on insecure configuration (see [Deployment](#deployment)).
 - **Default-deny `/api` baseline** — a filter authenticates every `/api/**` request against an explicit allow-list (`/api/public/**`, `/api/internal/**`, `GET /api/capabilities`), so a controller added without its own auth is denied by default rather than silently open. Recognizes gateway Bearer / operator Basic / engine Basic. Opt-in (the `prod` profile or `luke.auth.api-default-deny=true`); dev/qa pass through unchanged. Defense-in-depth on top of the per-route filters (gateway/operator/internal/capability).
@@ -84,7 +85,7 @@ The outbox guarantees the capability's data commit and the "notify the process e
 | Database | PostgreSQL 16 (H2 in local dev) |
 | Migrations | Flyway (V1–V13) |
 | Connectors | FluxNova Connect (HTTP/SOAP) |
-| Scripting | GraalVM JS, Groovy, Jython (JSR-223) |
+| Scripting | none (JSR-223 engines removed in #22; `${…}` uses the built-in JUEL) |
 | Signatures | Apache PDFBox 3 + BouncyCastle (PAdES) |
 | Object storage | AWS SDK v2 (S3) for document/signature stores |
 | Build | Maven (wrapper `./mvnw`) |
@@ -122,7 +123,7 @@ On a fresh database the engine seeds an `admin` user (password from `CAMUNDA_ADM
 
 ## Deployment
 
-The service ships as a multi-stage Docker image (JDK 21 build stage → JRE 21 runtime, running as a non-root `luke` user with a real writable home for GraalVM JS). It is deployed on [Render](https://render.com) from the `render.yaml` Blueprint (the canonical platform blueprint lives in `luke-platform`), which provisions the web service plus a managed PostgreSQL 16 instance and wires the DB connection env vars automatically. Render injects `$PORT`; the JVM is container-sized with `MaxRAMPercentage=55.0` to leave headroom for the scripting engines' off-heap footprint on the starter plan.
+The service ships as a multi-stage Docker image (JDK 21 build stage → JRE 21 runtime, running as a non-root `luke` user with a real writable home). It is deployed on [Render](https://render.com) from the `render.yaml` Blueprint (the canonical platform blueprint lives in `luke-platform`), which provisions the web service plus a managed PostgreSQL 16 instance and wires the DB connection env vars automatically. Render injects `$PORT`; the JVM is container-sized with `MaxRAMPercentage=55.0` to leave headroom for non-heap/native memory on the 512 MB starter plan (comfortably so since #22 removed the scripting engines' off-heap footprint).
 
 Health probes: `/actuator/health/readiness` (used by Render — goes down during drain / DB loss) and `/actuator/health/liveness`.
 

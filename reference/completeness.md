@@ -16,7 +16,7 @@ elsewhere in the manual.
 | 2 | [luke-email](/libraries/email) | 90 | 91 | 94 | 92 | 93 | 92 | **93** | <span class="pill lib">Library</span> |
 | 3 | [luke-auth-engine](/services/auth-engine) | 90 | 92 | 94 | 94 | 93 | 97 | **93** | <span class="pill ready">Ready</span> |
 | 4 | [luke-agents](/services/agents) | 89 | 88 | 85 | 88 | 90 | 88 | **88** | <span class="pill ready">Ready</span> |
-| 5 | [luke-core-engine](/services/core-engine) | 90 | 88 | 86 | 83 | 89 | 92 | **88** | <span class="pill partial">Partial</span> |
+| 5 | [luke-core-engine](/services/core-engine) | 90 | 89 | 88 | 83 | 89 | 93 | **89** | <span class="pill partial">Partial</span> |
 | 6 | [luke-platform](/operations/platform) | 88 | 88 | 82 | 90 | 85 | 91 | **88** | <span class="pill partial">Partial</span> |
 | 7 | [luke-file-proxy](/services/file-proxy) | 85 | 88 | 62 | 80 | 80 | 87 | **85** | <span class="pill partial">Partial</span> |
 | 8 | [luke-consumer-ui](/apps/consumer-ui) | 88 | 85 | 85 | 62 | 90 | 80 | **84** | <span class="pill partial">Partial</span> |
@@ -77,9 +77,14 @@ user/role/capability/tenant mutation writes a `luke_audit_event` record
 (actor/action/target/tenant/source), operator- and owner-queryable, fail-soft to a `luke.audit` log
 backstop (#37); and a **default-deny `/api` baseline** (prod-/flag-gated) that closed **three
 previously-unguarded routes** reachable with only a spoofable `X-Tenant-Id` (`/api/email-boxes`,
-`/api/minions`, `/api/my-subscriptions`) and denies any future un-authed `/api` controller by
-default (#20 — the AC-2 controller→injected-principal refactor is the remaining follow-up).
-Hardening **91 → 92**; 386 → **409 tests**.
+`/api/minions`, `/api/my-subscriptions`), denies any future un-authed `/api` controller by default,
+and consolidates all credential parsing into one shared `ApiCallerResolver` the seven self-auth
+controllers now delegate to (#20 — all ACs done); a **memory fix** removing the unused GraalVM
+JS/Jython/Groovy scripting engines that were OOM-pressuring the 512 MB starter plan (#22); and a
+**data-retention / PII-expiry** job (opt-in, dry-run-first) that deletes/anonymizes email sends,
+form-submission payloads, form audit events and terminal OTP challenges past per-class windows, with
+tenant deletion cascading the same trails for right-to-erasure (#53). Hardening **91 → 93**; 386 →
+**423 tests**.
 
 An earlier hardening pass lifted four components toward production-ready:
 
