@@ -68,7 +68,7 @@ Hardening is layered so dev/qa stay lenient (browser-direct, no gateway) while a
 | Default brain / model | **Groq** — `openai/gpt-oss-120b` primary, `llama-3.3-70b-versatile` fallback |
 | Alternate brains | OpenAI (`gpt-5-nano`, Structured Outputs), Gemini (`gemini-2.0-flash`), Ollama (`qwen2.5:7b`, local dev) — first key present wins, or force with `AGENTS_BRAIN` |
 | Rate-limit store | Redis (`redis` 5.2, sorted-set sliding window) or in-memory fallback |
-| Transcript store | Postgres (`psycopg2-binary`, `luke_agents` schema) or append-only JSONL (dev) |
+| Transcript store | Postgres (`psycopg2-binary`, `luke_agents` schema; schema managed by **Alembic** migrations run as a pre-deploy step) or append-only JSONL (dev) |
 | CI | GitHub Actions — compileall + `pytest` on 3.12 every PR / push to `develop`; separate Semgrep + gitleaks + Trivy security scan |
 | Tests | ~91 tests across ~14 files (ratelimit/Redis, tenancy, prompt-injection bounds, retention/PII, streaming export, timeouts, security hardening, observability) |
 | Container | **None** — Render-native Python runtime (no Dockerfile) |
@@ -109,6 +109,7 @@ The in-memory rate limiter is correct only for a single always-on single-worker 
 Production-ready and deployed. Known items to be aware of:
 
 - **Durable, observable transcript writes.** Turn writes run off the response path on a bounded queue that retries transient DB/pool errors with backoff, counts drops (surfaced at `/health`, never a silently-swallowed exception), and is flushed on graceful shutdown (Render SIGTERMs on every redeploy). The Postgres pool is sized via `AGENTS_DB_POOL_MIN/MAX`. JSONL is **dev-only**: in production (`AGENTS_ENV`) with transcripts enabled and no `DATABASE_URL`, recording is **disabled with a loud warning** rather than silently written to Render's ephemeral disk — set `DATABASE_URL` for durable retention and fine-tuning exports. Recording still never fails a chat.
+- **Versioned schema migrations.** The transcript schema is managed by Alembic (`migrations/`), not ad-hoc inline DDL: ordered, reviewable revisions parameterized by `AGENTS_DB_SCHEMA`, applied via `alembic upgrade head` as a `render.yaml` pre-deploy step (a no-op when `DATABASE_URL` is unset). CI spins Postgres and asserts they upgrade, reverse, and re-apply cleanly. The app's `init()` remains a runtime safety-net so a first boot works before migrations run.
 - **No live-LLM integration tests.** The ~104 tests cover the plumbing (rate limiting, tenancy, prompt-injection bounds, retention/PII, export streaming, timeouts, transcript durability) with the model mocked; there is no test that exercises a real Groq/OpenAI call end-to-end, so provider/model drift is caught only at runtime.
 - **Auth/tenant gates default-lenient.** The API-key and tenant checks are no-ops until `AGENTS_API_KEY` / `AGENTS_REQUIRE_TENANT` are set, which is intended for the current browser-direct flow but means the unauthenticated surface only closes once traffic routes through the gateway server-side.
 
