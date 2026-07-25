@@ -42,7 +42,7 @@ consumer-ui / core-engine
 | `sentiment` (LukeSense) | LukeSense Sentiment Analyzer | 0.1.0 | `POST /analyze`, `POST /batch`, `POST /intake` | sentiment / urgency / theme classification of short business text |
 | `workflow` | LukeFlow Workflow Builder | 0.1.0 | `POST /chat` | valid, wireable `WorkflowDoc` |
 
-`GET /health` reports the active brain, the transcript backend, the default agent, and the mounted agents. `GET /` serves the default agent's UI (or a landing page). The `form` agent is also mounted at the root (`POST /chat`, `GET /`) for drop-in compatibility.
+`GET /health` reports the active brain, the transcript backend (with an `ephemeral` flag and write counters — dropped/retried/written), the default agent, and the mounted agents. `GET /` serves the default agent's UI (or a landing page). The `form` agent is also mounted at the root (`POST /chat`, `GET /`) for drop-in compatibility.
 
 ## Key features
 
@@ -108,8 +108,8 @@ The in-memory rate limiter is correct only for a single always-on single-worker 
 
 Production-ready and deployed. Known items to be aware of:
 
-- **JSONL transcript store is dev-only.** Without `DATABASE_URL`, turns are appended to JSONL files under `TRANSCRIPTS_DIR`; Render's disk is ephemeral, so durable retention (and fine-tuning exports) requires wiring the shared Postgres. Recording is best-effort and never fails a chat.
-- **No live-LLM integration tests.** The ~91 tests cover the plumbing (rate limiting, tenancy, prompt-injection bounds, retention/PII, export streaming, timeouts) with the model mocked; there is no test that exercises a real Groq/OpenAI call end-to-end, so provider/model drift is caught only at runtime.
+- **Durable, observable transcript writes.** Turn writes run off the response path on a bounded queue that retries transient DB/pool errors with backoff, counts drops (surfaced at `/health`, never a silently-swallowed exception), and is flushed on graceful shutdown (Render SIGTERMs on every redeploy). The Postgres pool is sized via `AGENTS_DB_POOL_MIN/MAX`. JSONL is **dev-only**: in production (`AGENTS_ENV`) with transcripts enabled and no `DATABASE_URL`, recording is **disabled with a loud warning** rather than silently written to Render's ephemeral disk — set `DATABASE_URL` for durable retention and fine-tuning exports. Recording still never fails a chat.
+- **No live-LLM integration tests.** The ~104 tests cover the plumbing (rate limiting, tenancy, prompt-injection bounds, retention/PII, export streaming, timeouts, transcript durability) with the model mocked; there is no test that exercises a real Groq/OpenAI call end-to-end, so provider/model drift is caught only at runtime.
 - **Auth/tenant gates default-lenient.** The API-key and tenant checks are no-ops until `AGENTS_API_KEY` / `AGENTS_REQUIRE_TENANT` are set, which is intended for the current browser-direct flow but means the unauthenticated surface only closes once traffic routes through the gateway server-side.
 
 For how this service scores against the broader platform readiness checklist, see the [Completeness Scorecard](/reference/completeness).
