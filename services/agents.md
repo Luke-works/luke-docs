@@ -57,6 +57,7 @@ Hardening is layered so dev/qa stay lenient (browser-direct, no gateway) while a
 - **Correlation-ID logging** — a middleware accepts a safe `X-Correlation-Id` (or generates one), echoes it, and tags every JSON log line — a trace spans the same header the Java services use.
 - **PII redaction & retention** — form/email content can carry PII; `tools/retention.py` prunes aged transcripts and redaction keeps sensitive fields out of logs (see `docs/DATA_HANDLING.md`).
 - **Consent-gated transcripts** — every `/chat` turn is recorded as a ready-made supervised training example, but passing `consent:false` excludes that turn, and explicit `feedback` (`accepted:false` / `rating:-1`) is dropped from exports.
+- **Audit trail + operator-gated export** — sensitive actions write an append-only `audit_log` row (actor, action, scope, request id, timestamp; queryable). A `/feedback` label change is audited against the **verified principal** (the gateway-set tenant, never the client-supplied `user_id`). The fine-tune export / tenant-erasure CLI is gated behind an operator credential (`AGENTS_OPERATOR_TOKEN` + `--operator-token`) and records who exported what.
 
 ## Technology
 
