@@ -70,11 +70,13 @@ shape across controllers *and* the auth filters — also closing a JSON-injectio
 `X-Tenant-Id` was concatenated into a response body (#63); **tenant fail-closed** — the Hibernate
 tenant filter now matches nothing (not every row) when no tenant is in context, and the entity
 listener throws instead of persisting untenanted (#21); a **rate limit on the public embed GET
-render** that was previously unbounded, with `Retry-After` (#55); and a **durable, append-only admin
-audit trail** — every privileged user/role/capability/tenant mutation writes a `luke_audit_event`
-record (actor/action/target/tenant/source), operator- and owner-queryable, fail-soft to a
-`luke.audit` log backstop (#37). Hardening **91 → 92**; 386 → **393 tests**. More items (#20
-default-deny baseline, a distributed limiter store) remain open.
+render** that was previously unbounded, with `Retry-After`, then a **shared cross-replica limiter**
+(Redis fixed-window `INCR` behind `REDIS_URL`, in-memory fallback) so horizontal scale-out can't
+dilute the cap (#55); and a **durable, append-only admin audit trail** — every privileged
+user/role/capability/tenant mutation writes a `luke_audit_event` record
+(actor/action/target/tenant/source), operator- and owner-queryable, fail-soft to a `luke.audit` log
+backstop (#37). Hardening **91 → 92**; 386 → **398 tests**. The **#20 default-deny `/api` baseline**
+remains open.
 
 An earlier hardening pass lifted four components toward production-ready:
 
