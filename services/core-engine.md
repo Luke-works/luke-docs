@@ -16,7 +16,7 @@ Collapsing the former standalone `luke-capability-engine` into the process engin
 See [Capabilities](/concepts/capabilities), [Multi-Tenancy](/concepts/tenancy), and [Authentication & Authorization](/concepts/auth) for the platform-wide concepts this service implements.
 
 ::: info At a glance
-~53 REST controllers · ~29 services · ~274 endpoint mappings · 17 Flyway migrations (V1–V17) · ~433 tests.
+~53 REST controllers · ~29 services · ~274 endpoint mappings · 17 Flyway migrations (V1–V17) · ~440 tests · OpenAPI at `/v3/api-docs`.
 :::
 
 ## Architecture
@@ -76,6 +76,9 @@ The outbox guarantees the capability's data commit and the "notify the process e
 - **Admin audit trail** — every privileged admin mutation (user/role/candidate-group/capability changes, org creation, account & tenant deletion) writes a durable, append-only `luke_audit_event` record (actor, action, target, tenant scope, source IP/method/path, correlation id) via `AdminAuditService`. Read with `GET /api/audit` (tenant-scoped — operator or tenant owner) and `GET /api/audit/all` (operator-only, cross-tenant), newest-first and paginated. Fail-soft: a broken store degrades to a `luke.audit` log backstop and never blocks the action it records.
 - **Public embed rate limiting** — the unauthenticated `/api/public/embed/**` render + submit endpoints are throttled per token and per source IP (429 + `Retry-After`). Per-instance in-memory by default; set `REDIS_URL` to make it a **global cross-replica** limiter (fixed-window Redis `INCR`) so horizontal scale-out can't dilute the cap. Falls back to in-memory if Redis is unset or unreachable — the limiter never blocks boot.
 - **Correlation IDs & health probes** — `CorrelationIdFilter` for request tracing; Spring Boot Actuator liveness/readiness endpoints for Render.
+- **OpenAPI spec** — the custom `/api/**` surface is published as an OpenAPI 3 document at `/v3/api-docs` (springdoc, JSON-only), auto-derived from the controllers incl. required headers (`X-Tenant-Id`/`Authorization`) and the `{error,message,status,correlationId}` error schema, with the gateway-Bearer / operator-Basic / internal-key auth schemes documented.
+- **Tuned job executor (HA)** — the FluxNova job executor is explicitly sized (`fluxnova.bpm.job-execution`, pool 5) against the Hikari pool (8) so background jobs can't starve the request path; `deployment-aware: false` for balanced multi-instance acquisition. See the `scaling-and-ha` runbook.
+- **Single RBAC role catalog** — role ids, assignability, and dimension mappings live in one `RoleCatalog` the org-admin and permissions views derive from (a drift test pins them); `deployer` is documented internal-only.
 
 ## Technology
 

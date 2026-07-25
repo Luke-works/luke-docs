@@ -16,7 +16,7 @@ elsewhere in the manual.
 | 2 | [luke-email](/libraries/email) | 90 | 91 | 94 | 92 | 93 | 92 | **93** | <span class="pill lib">Library</span> |
 | 3 | [luke-auth-engine](/services/auth-engine) | 90 | 92 | 94 | 94 | 93 | 97 | **93** | <span class="pill ready">Ready</span> |
 | 4 | [luke-agents](/services/agents) | 89 | 88 | 85 | 88 | 90 | 88 | **88** | <span class="pill ready">Ready</span> |
-| 5 | [luke-core-engine](/services/core-engine) | 90 | 89 | 88 | 83 | 89 | 93 | **89** | <span class="pill partial">Partial</span> |
+| 5 | [luke-core-engine](/services/core-engine) | 90 | 89 | 89 | 85 | 89 | 93 | **89** | <span class="pill partial">Partial</span> |
 | 6 | [luke-platform](/operations/platform) | 88 | 88 | 82 | 90 | 85 | 91 | **88** | <span class="pill partial">Partial</span> |
 | 7 | [luke-file-proxy](/services/file-proxy) | 85 | 88 | 62 | 80 | 80 | 87 | **85** | <span class="pill partial">Partial</span> |
 | 8 | [luke-consumer-ui](/apps/consumer-ui) | 88 | 85 | 85 | 62 | 90 | 80 | **84** | <span class="pill partial">Partial</span> |
@@ -86,8 +86,11 @@ form-submission payloads, form audit events and terminal OTP challenges past per
 tenant deletion cascading the same trails for right-to-erasure (#53); **async email delivery** with
 retry-and-backoff + Micrometer metrics that stops tying serving threads to Postmark latency (OTP kept
 synchronous) (#59); and a **form-intake SLA + escalation** — a non-interrupting boundary timer flags
-an unactioned review overdue (per-tenant metric) instead of letting submissions sit forever (#46).
-Hardening **91 → 93**; 386 → **433 tests**.
+an unactioned review overdue (per-tenant metric) instead of letting submissions sit forever (#46); a
+single **`RoleCatalog`** the org-admin + permissions views derive from (drift-tested), resolving the
+`deployer` inconsistency (#43); an explicitly **tuned, HA-safe job executor** sized against the DB
+pool (#28); and an **OpenAPI 3 spec** of the `/api/**` surface at `/v3/api-docs` (#35). Hardening
+**91 → 93**, Docs **83 → 85**; 386 → **440 tests** (12 issues cleared this cycle).
 
 An earlier hardening pass lifted four components toward production-ready:
 
