@@ -16,7 +16,7 @@ Collapsing the former standalone `luke-capability-engine` into the process engin
 See [Capabilities](/concepts/capabilities), [Multi-Tenancy](/concepts/tenancy), and [Authentication & Authorization](/concepts/auth) for the platform-wide concepts this service implements.
 
 ::: info At a glance
-~52 REST controllers · ~27 services · ~273 endpoint mappings · 16 Flyway migrations (V1–V16) · ~398 tests.
+~53 REST controllers · ~27 services · ~274 endpoint mappings · 16 Flyway migrations (V1–V16) · ~409 tests.
 :::
 
 ## Architecture
@@ -69,6 +69,7 @@ The outbox guarantees the capability's data commit and the "notify the process e
 - **Connectors & scripting** — FluxNova Connect (HTTP/SOAP service tasks) plus JSR-223 scripting engines (GraalVM JS, Groovy, Jython) for BPMN logic.
 - **User lifecycle (operator + self-service)** — `POST /api/admin/onboard-user` provisions a user into a tenant/role, and `POST /api/admin/deprovision-user` revokes all of a user's access (memberships, the user, capability grants, any sole-owned tenant) — the operator/IdP counterpart to the user's own `DELETE /api/me/account`, sharing one `UserDeprovisioningService` so the cleanup can't drift. luke-auth-engine's WorkOS deprovisioning webhook calls it on IdP leaver events.
 - **Fail-fast security guards** — a set of `@PostConstruct` guards refuse to boot (or warn loudly) on insecure configuration (see [Deployment](#deployment)).
+- **Default-deny `/api` baseline** — a filter authenticates every `/api/**` request against an explicit allow-list (`/api/public/**`, `/api/internal/**`, `GET /api/capabilities`), so a controller added without its own auth is denied by default rather than silently open. Recognizes gateway Bearer / operator Basic / engine Basic. Opt-in (the `prod` profile or `luke.auth.api-default-deny=true`); dev/qa pass through unchanged. Defense-in-depth on top of the per-route filters (gateway/operator/internal/capability).
 - **Admin audit trail** — every privileged admin mutation (user/role/candidate-group/capability changes, org creation, account & tenant deletion) writes a durable, append-only `luke_audit_event` record (actor, action, target, tenant scope, source IP/method/path, correlation id) via `AdminAuditService`. Read with `GET /api/audit` (tenant-scoped — operator or tenant owner) and `GET /api/audit/all` (operator-only, cross-tenant), newest-first and paginated. Fail-soft: a broken store degrades to a `luke.audit` log backstop and never blocks the action it records.
 - **Public embed rate limiting** — the unauthenticated `/api/public/embed/**` render + submit endpoints are throttled per token and per source IP (429 + `Retry-After`). Per-instance in-memory by default; set `REDIS_URL` to make it a **global cross-replica** limiter (fixed-window Redis `INCR`) so horizontal scale-out can't dilute the cap. Falls back to in-memory if Redis is unset or unreachable — the limiter never blocks boot.
 - **Correlation IDs & health probes** — `CorrelationIdFilter` for request tracing; Spring Boot Actuator liveness/readiness endpoints for Render.
