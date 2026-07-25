@@ -16,7 +16,7 @@ Collapsing the former standalone `luke-capability-engine` into the process engin
 See [Capabilities](/concepts/capabilities), [Multi-Tenancy](/concepts/tenancy), and [Authentication & Authorization](/concepts/auth) for the platform-wide concepts this service implements.
 
 ::: info At a glance
-~53 REST controllers · ~28 services · ~274 endpoint mappings · 17 Flyway migrations (V1–V17) · ~423 tests.
+~53 REST controllers · ~29 services · ~274 endpoint mappings · 17 Flyway migrations (V1–V17) · ~433 tests.
 :::
 
 ## Architecture
@@ -68,6 +68,8 @@ The outbox guarantees the capability's data commit and the "notify the process e
 - **Transactional outbox write-back** — capabilities drive BPMN processes durably (see above).
 - **Connectors** — FluxNova Connect (HTTP/SOAP service tasks) for BPMN service-task integration. (The JSR-223 scripting engines were removed in #22 to cut the container's off-heap footprint — no BPMN used them; re-add one engine if script tasks are ever needed.)
 - **Data retention & PII expiry** — an opt-in scheduled job (`luke.retention.*`, off by default, dry-run-first) deletes/anonymizes PII trails past per-class windows: email sends, form-submission payloads, form audit events, and terminal OTP challenges. Tenant deletion cascades the same trails (right-to-erasure). See the repo's `docs/runbooks/data-retention.md`.
+- **Async email delivery** — notification sends persist a `QUEUED` row and return immediately; an `@Async` after-commit dispatcher delivers off the request thread with retry-and-backoff (transient failures only — never a business rejection). Latency/outcome are on Micrometer (`luke.email.send*`). OTP stays synchronous so the code is confirmed inline.
+- **Form-intake SLA & escalation** — the per-tenant intake process has a non-interrupting boundary timer on the review task: an unactioned submission is flagged overdue (metric `luke.forms.review.overdue{tenant}`) at the SLA and on recurrence, rather than sitting silently pending.
 - **User lifecycle (operator + self-service)** — `POST /api/admin/onboard-user` provisions a user into a tenant/role, and `POST /api/admin/deprovision-user` revokes all of a user's access (memberships, the user, capability grants, any sole-owned tenant) — the operator/IdP counterpart to the user's own `DELETE /api/me/account`, sharing one `UserDeprovisioningService` so the cleanup can't drift. luke-auth-engine's WorkOS deprovisioning webhook calls it on IdP leaver events.
 - **Fail-fast security guards** — a set of `@PostConstruct` guards refuse to boot (or warn loudly) on insecure configuration (see [Deployment](#deployment)).
 - **Default-deny `/api` baseline** — a filter authenticates every `/api/**` request against an explicit allow-list (`/api/public/**`, `/api/internal/**`, `GET /api/capabilities`), so a controller added without its own auth is denied by default rather than silently open. Recognizes gateway Bearer / operator Basic / engine Basic. Opt-in (the `prod` profile or `luke.auth.api-default-deny=true`); dev/qa pass through unchanged. Defense-in-depth on top of the per-route filters (gateway/operator/internal/capability).

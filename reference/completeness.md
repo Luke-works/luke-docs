@@ -83,8 +83,11 @@ controllers now delegate to (#20 — all ACs done); a **memory fix** removing th
 JS/Jython/Groovy scripting engines that were OOM-pressuring the 512 MB starter plan (#22); and a
 **data-retention / PII-expiry** job (opt-in, dry-run-first) that deletes/anonymizes email sends,
 form-submission payloads, form audit events and terminal OTP challenges past per-class windows, with
-tenant deletion cascading the same trails for right-to-erasure (#53). Hardening **91 → 93**; 386 →
-**423 tests**.
+tenant deletion cascading the same trails for right-to-erasure (#53); **async email delivery** with
+retry-and-backoff + Micrometer metrics that stops tying serving threads to Postmark latency (OTP kept
+synchronous) (#59); and a **form-intake SLA + escalation** — a non-interrupting boundary timer flags
+an unactioned review overdue (per-tenant metric) instead of letting submissions sit forever (#46).
+Hardening **91 → 93**; 386 → **433 tests**.
 
 An earlier hardening pass lifted four components toward production-ready:
 
