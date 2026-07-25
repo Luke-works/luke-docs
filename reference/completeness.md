@@ -16,7 +16,7 @@ elsewhere in the manual.
 | 2 | [luke-email](/libraries/email) | 90 | 91 | 94 | 92 | 93 | 92 | **93** | <span class="pill lib">Library</span> |
 | 3 | [luke-auth-engine](/services/auth-engine) | 90 | 92 | 94 | 94 | 93 | 97 | **93** | <span class="pill ready">Ready</span> |
 | 4 | [luke-agents](/services/agents) | 89 | 88 | 85 | 88 | 90 | 88 | **88** | <span class="pill ready">Ready</span> |
-| 5 | [luke-core-engine](/services/core-engine) | 90 | 88 | 86 | 83 | 89 | 91 | **88** | <span class="pill partial">Partial</span> |
+| 5 | [luke-core-engine](/services/core-engine) | 90 | 88 | 86 | 83 | 89 | 92 | **88** | <span class="pill partial">Partial</span> |
 | 6 | [luke-platform](/operations/platform) | 88 | 88 | 82 | 90 | 85 | 91 | **88** | <span class="pill partial">Partial</span> |
 | 7 | [luke-file-proxy](/services/file-proxy) | 85 | 88 | 62 | 80 | 80 | 87 | **85** | <span class="pill partial">Partial</span> |
 | 8 | [luke-consumer-ui](/apps/consumer-ui) | 88 | 85 | 85 | 62 | 90 | 80 | **84** | <span class="pill partial">Partial</span> |
@@ -63,6 +63,18 @@ The first, eight-issue pass lifted it 88 → **91**, touching every axis:
   the engine membership via a new core-engine operator endpoint (#38 — only Directory-Sync
   mapping remains). Tests **75 → 120**. CI/CD **85 → 90**, Hardening **92 → 95**, Docs
   **82 → 91**, Tests **85 → 90**.
+
+An in-flight **[luke-core-engine](/services/core-engine)** hardening pass (ongoing) has so far
+shipped: a **global exception handler** giving `/api/**` one `{error,message,status,correlationId}`
+shape across controllers *and* the auth filters — also closing a JSON-injection hole where a raw
+`X-Tenant-Id` was concatenated into a response body (#63); **tenant fail-closed** — the Hibernate
+tenant filter now matches nothing (not every row) when no tenant is in context, and the entity
+listener throws instead of persisting untenanted (#21); a **rate limit on the public embed GET
+render** that was previously unbounded, with `Retry-After` (#55); and a **durable, append-only admin
+audit trail** — every privileged user/role/capability/tenant mutation writes a `luke_audit_event`
+record (actor/action/target/tenant/source), operator- and owner-queryable, fail-soft to a
+`luke.audit` log backstop (#37). Hardening **91 → 92**; 386 → **393 tests**. More items (#20
+default-deny baseline, a distributed limiter store) remain open.
 
 An earlier hardening pass lifted four components toward production-ready:
 
