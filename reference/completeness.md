@@ -15,8 +15,8 @@ elsewhere in the manual.
 | 1 | [luke-forms](/libraries/forms) | 95 | 95 | 98 | 90 | 92 | 96 | **94** | <span class="pill ready">Ready</span> |
 | 2 | [luke-email](/libraries/email) | 90 | 91 | 94 | 92 | 93 | 92 | **93** | <span class="pill lib">Library</span> |
 | 3 | [luke-auth-engine](/services/auth-engine) | 90 | 92 | 94 | 94 | 93 | 97 | **93** | <span class="pill ready">Ready</span> |
-| 4 | [luke-agents](/services/agents) | 89 | 88 | 85 | 88 | 90 | 88 | **88** | <span class="pill ready">Ready</span> |
-| 5 | [luke-core-engine](/services/core-engine) | 90 | 89 | 89 | 85 | 89 | 93 | **89** | <span class="pill partial">Partial</span> |
+| 4 | [luke-agents](/services/agents) | 91 | 90 | 93 | 91 | 92 | 93 | **92** | <span class="pill ready">Ready</span> |
+| 5 | [luke-core-engine](/services/core-engine) | 90 | 89 | 90 | 85 | 89 | 94 | **90** | <span class="pill partial">Partial</span> |
 | 6 | [luke-platform](/operations/platform) | 88 | 88 | 82 | 90 | 85 | 91 | **88** | <span class="pill partial">Partial</span> |
 | 7 | [luke-file-proxy](/services/file-proxy) | 85 | 88 | 62 | 80 | 80 | 87 | **85** | <span class="pill partial">Partial</span> |
 | 8 | [luke-consumer-ui](/apps/consumer-ui) | 88 | 85 | 85 | 62 | 90 | 80 | **84** | <span class="pill partial">Partial</span> |
@@ -32,9 +32,33 @@ elsewhere in the manual.
 *Not scored: `luke-capability-engine`, `luke-signature-engine` — empty shells merged into
 [core-engine](/services/core-engine).*
 
-**Fleet average overall ≈ 80%.**
+**Fleet average overall ≈ 81%.**
 
 ::: tip Recent uplifts
+The newest pass lifted **[luke-agents](/services/agents)** 88 → **92** (now #4) — twelve issues
+clearing its enterprise backlog end-to-end, top severity down. A **durable transcript write path**
+(an off-request-path retrying queue with a configurable pool, a graceful-shutdown flush, and drop
+counters) closed a silent data-loss hole where turns vanished on redeploy or pool exhaustion
+(#41/#30/#28), and a prod guard now refuses to record to ephemeral JSONL. **Alembic-managed schema
+migrations** run as a pre-deploy step, validated by a real-Postgres CI job (#31). An **append-only
+audit trail** records exports and label-changes against the *verified* principal (never a
+client-supplied field), with an **operator-token gate** on the corpus export (#40). A
+**liveness/readiness split** (`/health` can't-fail vs a 503-capable `/health/ready` dependency
+probe) runs on a modern lifespan replacing the deprecated `on_event` hooks (#35/#36). The LLM path
+gained **transient-retry + a per-brain circuit breaker** and **reused provider clients** (#24/#25),
+a **Prometheus `/metrics`** endpoint surfaces request volume/latency + transcript counters (#22),
+and the API is now **versioned under `/v1` with a curated OpenAPI** (X-Agents-Key security scheme,
+app v1.0.0) while legacy paths stay for drop-in clients (#37). Tests **91 → 129**; Hardening
+**88 → 93**, Tests **85 → 93**, Docs/CI/CD/Feature/Quality each +2–3.
+
+A follow-on **RBAC pass** lifted **[luke-core-engine](/services/core-engine)** 89 → **90**: the
+WorkOS→engine role map (`RoleCatalog.fromWorkosSlug`, mirrored 1:1 in the WorkOS control plane)
+provisions IdP-assigned roles at onboarding, fail-closed on unknown (#61); **finer-grained named
+capability actions** gate publish/sign-off/delete separately from ordinary write, with a new
+`contributor` level (edit-but-not-publish/delete) and **owner-implicit capability access** (#104
+AC-1/AC-2); [consumer-ui](/apps/consumer-ui) surfaces the `contributor` grant in its access UI
+(#46). 440 → **460 tests**, Hardening 93 → **94**.
+
 Two successive passes lifted auth-engine 88 → **93** (now tied for #2). A second,
 "path-to-best-in-fleet" pass added: a shared **Redis rate limiter** (global cross-replica cap,
 in-memory fallback) closing the per-instance limit gap (#56); a real **end-to-end JWKS
@@ -119,8 +143,8 @@ enforceable gates as forms/email.
 
 - **Hardening is a fleet-wide strength** — 85+ on every shipped service (fail-fast guards,
   tenant isolation, supply-chain scans). See [Security](/operations/security).
-- **Testing is the most uneven axis** — elite on test-first libraries (forms 98, email /
-  agents / analytics 82–85) but thin on the UIs (core-ui 48, marketing-ui 0). The extracted
+- **Testing is the most uneven axis** — elite on the test-first services (forms 98, email 94,
+  agents 93) but thin on the UIs (core-ui 48, marketing-ui 0). The extracted
   libs signatures and workflow now carry `-core` fuzz suites; their React layers remain the
   frontier. See [Testing](/operations/testing).
 - **CI is now near-universal** — the last two libraries without a pipeline (signatures,
@@ -134,7 +158,8 @@ enforceable gates as forms/email.
 1. Test coverage on the **React layers** of luke-signatures / luke-workflow (~2k LOC each,
    hard to test under jsdom + react-pdf / react-flow) and broaden **luke-core-ui** e2e.
 2. Push **luke-lists** / **luke-analytics** to GitHub (local-only today) so they get CI + the gates.
-3. Decide **luke-task-engine**'s fate — archive or delete (superseded, dead weight).
+3. Retire **luke-task-engine** — confirmed superseded by the engine's outbox/job-worker model and
+   dropped from the active roadmap; archive or delete the repo (and its core-ui external-tasks UI).
 4. Enable **WorkOS Directory Sync** for a pilot tenant so auth-engine's deprovisioning webhook
    can act on `dsync.*` deactivations — the only remaining piece of #38 (the `user.deleted`
    leaver loop and the central-enforcement migration of #29 both shipped).
