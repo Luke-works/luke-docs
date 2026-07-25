@@ -73,8 +73,9 @@ still resolve against the app.
 ### App sections & capabilities
 
 Product areas are gated by tenant [subscription level](/concepts/capabilities).
-Routes for a capability are wrapped in a `CapabilityRoute` guard, and the
-`WORKFLOW` capability is hidden by default (see status below).
+Routes for a capability are wrapped in a `CapabilityRoute` guard. The MVP surface is
+**Forms + Email + Access**; the `PHONE`, `SIGNATURES` and `WORKFLOW` capabilities are
+**hidden by default** (post-MVP — see status below).
 
 | Section | Capability | Representative routes |
 | --- | --- | --- |
@@ -114,10 +115,12 @@ part of the platform's headless WorkOS-based auth. See
   inbox, instances, responses, embed and send panels, plus an AI assist panel.
 - **Email** — template list + visual/AI builder (`EmailTemplateBuilderPage`) and an
   email section, built on react-email components.
-- **Signatures** — signature template builder, list, and the public signing page.
-- **Phone** — call list and detail views for the Vapi-backed voice capability.
+- **Signatures** — signature template builder, list, and the public signing page
+  (post-MVP; hidden behind a flag).
+- **Phone** — call list and detail views for the Vapi-backed voice capability
+  (post-MVP; hidden behind a flag).
 - **Workflow** — JSON→BPMN builder, runs modal, and Nango-backed connections
-  (hidden behind a flag).
+  (post-MVP; hidden behind a flag).
 - **Access management** — capability grants, access requests, members, invitations.
 - **Tenant switching** — multi-tenant session switching in the sidebar.
 - **AI assist panels** — per-capability assistants (forms, email, workflow) calling
@@ -195,8 +198,12 @@ still partial:
 
 - **Send-side runtime** — some outbound send paths (e.g. outbound-form send,
   email send-to-Camunda) are staged in the UI but not fully wired end-to-end.
-- **Workflow hidden** — the `WORKFLOW` capability is hidden from nav, routes, and
-  access lists behind `VITE_WORKFLOW_ENABLED` (default off) until launch.
+- **Post-MVP capabilities hidden** — the MVP UI is Forms + Email + Access only.
+  `PHONE`, `SIGNATURES` and `WORKFLOW` are hidden from nav, routes, and the
+  access/request/catalog lists, each behind its own flag (`VITE_PHONE_ENABLED` /
+  `VITE_SIGNATURES_ENABLED` / `VITE_WORKFLOW_ENABLED`, all default off) until launch.
+  The pages still exist and stay fully covered by the E2E suite (which enables all
+  three). Documents has no UI capability, so nothing is gated there.
 
 For an at-a-glance view of what is complete versus pending across the platform,
 see the [Completeness Scorecard](/reference/completeness).

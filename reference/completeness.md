@@ -8,6 +8,44 @@ elsewhere in the manual.
 *Tests* (automated coverage) · *Docs* · *CI/CD* (pipeline + deploy readiness) ·
 *Hardening* (auth, errors, config, validation).
 
+## MVP readiness (read this first)
+
+::: warning Scope is locked
+**MVP = Forms · Email · Access. Nothing else.** Phone, Workflow, Documents and Signatures are
+**post-MVP** — deliberately deferred, **not gaps** against the MVP. They must not be counted
+against readiness, and they are now **hidden from the shipped UI** by default (each behind its own
+`VITE_PHONE_ENABLED` / `VITE_SIGNATURES_ENABLED` / `VITE_WORKFLOW_ENABLED` flag; Documents has no
+UI surface). The per-repo scores further down are the *full-fleet* view — a repo marked "Partial"
+there is often only partial because of post-MVP capabilities that are out of scope here.
+:::
+
+The three MVP pillars, judged only on what the MVP needs:
+
+| Pillar | Backing | MVP verdict |
+| --- | --- | --- |
+| **Forms** | [luke-forms](/libraries/forms) 94 (Ready) · core-engine forms data-layer + design-time lifecycle · [consumer-ui](/apps/consumer-ui) builder/renderer | <span class="pill ready">Ready</span> — headless engine is the fleet's strongest repo; builder cut over; embed + submissions shipped. |
+| **Email** | [luke-email](/libraries/email) 93 · core-engine email data-layer + async delivery (retry/backoff/metrics) · Postmark send as a Camunda task | <span class="pill ready">Ready</span> — headless template engine + hardened outbound; no known MVP-blocking gap. |
+| **Access** | core-engine **RBAC/ABAC** (RoleCatalog SSOT, named actions, capability grants, owner-implicit access, tenant fail-closed, durable audit) · [auth-engine](/services/auth-engine) 93 (Ready) authentication · consumer-ui access UI (contributor level) | <span class="pill ready">Ready</span> — authorization owned + enforced by the engine; WorkOS is auth-only. RBAC depth complete (#104 closed; AC-1/AC-2 shipped, AC-3 = optional dsync convenience externalized to #105). |
+
+**Authorization ownership (locked):** RBAC **and** ABAC are owned and enforced by **core-engine**;
+**WorkOS is authentication only**; auth-engine is a stateless translator. A WorkOS org therefore
+does **not** need to sync with the engine's RBAC — SSO/SCIM org→tenant auto-provisioning is a
+*provisioning convenience* ([#105](https://github.com/Luke-works/luke-core-engine/issues/105),
+low/deferred), never an authz gap.
+
+**MVP-blocking remaining** (small, and none are new features):
+1. **FluxNova prod migration** — the CIBSeven→FluxNova cutover is green on its branch but **not yet
+   rolled to prod** (see [migration notes](/services/core-engine)). This is the one infra step
+   between "built" and "MVP-live".
+2. **Validate sign-off** — the recent RBAC/hardening batch sits in *Validate*; final review → Done.
+3. **consumer-ui docs** (62) — the largest under-documented MVP surface; a quality nicety, not a blocker.
+
+*Post-MVP, tracked but off the MVP path:* Phone (Vapi voice), Workflow (luke-workflow lib is
+pre-launch + UI-hidden), Documents (S3 object-storage plan, backlog-only), Signatures
+(luke-signatures lib is a library + UI-hidden). The external-task/topic registry that used to sit
+in the engine is **retired** ([#45](https://github.com/Luke-works/luke-core-engine/issues/45)),
+externalized to the standalone luke-tasks / TLM product.
+
 ## Scores (ranked)
 
 | # | Repo | Feat | Qual | Tests | Docs | CI/CD | Hard | **Overall** | Status |
@@ -55,9 +93,13 @@ A follow-on **RBAC pass** lifted **[luke-core-engine](/services/core-engine)** 8
 WorkOS→engine role map (`RoleCatalog.fromWorkosSlug`, mirrored 1:1 in the WorkOS control plane)
 provisions IdP-assigned roles at onboarding, fail-closed on unknown (#61); **finer-grained named
 capability actions** gate publish/sign-off/delete separately from ordinary write, with a new
-`contributor` level (edit-but-not-publish/delete) and **owner-implicit capability access** (#104
-AC-1/AC-2); [consumer-ui](/apps/consumer-ui) surfaces the `contributor` grant in its access UI
-(#46). 440 → **460 tests**, Hardening 93 → **94**.
+`contributor` level (edit-but-not-publish/delete) and **owner-implicit capability access**;
+[consumer-ui](/apps/consumer-ui) surfaces the `contributor` grant in its access UI (#46).
+**#104 is now closed** — the RBAC-depth core (named actions + role→capability auto-grants, AC-1/AC-2)
+shipped, and AC-3 (SSO/dsync org→tenant auto-provisioning) was **externalized as optional #105**
+because authorization is engine-owned and does not depend on WorkOS org sync. The stale
+external-task/topic registry (#45) was **retired** in the same pass (externalized to luke-tasks/TLM).
+440 → **460 tests**, Hardening 93 → **94**.
 
 Two successive passes lifted auth-engine 88 → **93** (now tied for #2). A second,
 "path-to-best-in-fleet" pass added: a shared **Redis rate limiter** (global cross-replica cap,
@@ -154,6 +196,10 @@ enforceable gates as forms/email.
   under-documented large surface.
 
 ## Highest-impact fixes (remaining)
+
+*Fleet-wide list — none of these are MVP-blocking. The only work between the MVP surface and
+"live" is the [FluxNova prod migration + Validate sign-off](#mvp-readiness-read-this-first) above;
+everything below is post-MVP polish or targets deferred capabilities.*
 
 1. Test coverage on the **React layers** of luke-signatures / luke-workflow (~2k LOC each,
    hard to test under jsdom + react-pdf / react-flow) and broaden **luke-core-ui** e2e.
