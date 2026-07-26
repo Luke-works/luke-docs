@@ -56,7 +56,7 @@ externalized to the standalone luke-tasks / TLM product.
 | 4 | [luke-agents](/services/agents) | 91 | 90 | 93 | 91 | 92 | 93 | **92** | <span class="pill ready">Ready</span> |
 | 5 | [luke-core-engine](/services/core-engine) | 90 | 89 | 90 | 85 | 89 | 94 | **90** | <span class="pill partial">Partial</span> |
 | 6 | [luke-platform](/operations/platform) | 88 | 88 | 82 | 90 | 85 | 91 | **88** | <span class="pill partial">Partial</span> |
-| 7 | [luke-file-proxy](/services/file-proxy) | 85 | 88 | 62 | 80 | 80 | 87 | **85** | <span class="pill partial">Partial</span> |
+| 7 | [luke-file-proxy](/services/file-proxy) | 85 | 88 | 66 | 80 | 80 | 90 | **86** | <span class="pill partial">Partial</span> |
 | 8 | [luke-consumer-ui](/apps/consumer-ui) | 88 | 85 | 85 | 62 | 90 | 80 | **84** | <span class="pill partial">Partial</span> |
 | 9 | [luke-signatures](/libraries/signatures) | 85 | 88 | 62 | 90 | 85 | 78 | **81** | <span class="pill lib">Library</span> |
 | 10 | [luke-workflow](/libraries/workflow) | 72 | 87 | 82 | 85 | 85 | 76 | **81** | <span class="pill exp">Pre-launch</span> |
@@ -73,7 +73,36 @@ externalized to the standalone luke-tasks / TLM product.
 **Fleet average overall ≈ 81%.**
 
 ::: tip Recent uplifts
-The newest pass lifted **[luke-agents](/services/agents)** 88 → **92** (now #4) — twelve issues
+A **fleet-wide autonomous hardening pass** (2026-07-25) audited all MVP-critical repos and shipped a
+safe, CI-green fix to **seven** of them in one sweep — security and reliability, each with tests:
+
+- **[luke-auth-engine](/services/auth-engine)** — the reverse proxy now routes every error through the
+  RFC 7807 boundary (a hostile `X-Tenant-Id` could previously break the JSON body), exposes the
+  correlation-id / download headers cross-origin, and has typed connect/request timeouts that surface a
+  slow engine as **504** (not a mislabeled 502).
+- **[luke-email](/libraries/email)** — `validateEmailDoc` now **blocks Mustachio raw-output/section
+  syntax** (`{{{x}}}`, `{{&x}}`, `{{#s}}…{{/s}}`), which would otherwise inject unescaped markup into the
+  *delivered* email (the escaping contract only covered `{{var}}`).
+- **[luke-file-proxy](/services/file-proxy)** — closed an **SSRF** in the Chromium PDF render (user form
+  data/theme could make the browser GET a cloud-metadata endpoint) via deny-by-default egress with a
+  font-host allowlist, and added the first tests to the previously-uncovered render path.
+- **[luke-agents](/services/agents)** — brain errors no longer **leak the raw provider exception** (and a
+  circuit-open 503 is preserved, not flattened to 502); Prometheus route labels use the matched template
+  so unmatched paths can't explode metric cardinality.
+- **[luke-consumer-ui](/apps/consumer-ui)** — token refresh is now **single-flight** (parallel 401s no
+  longer stampede `/auth/refresh` and rotate the cookie N times), and every auth/core fetch has a 30s
+  timeout so a hung gateway can't spin the UI forever.
+- **[luke-core-engine](/services/core-engine)** — the form-submission outbox now **auto-retries** a
+  transient start failure (bounded budget) instead of terminally stranding an MVP intake on the first
+  blip, and the **recipient OTP token secret** is now in the prod fail-fast key guard (the dev default
+  would let anyone forge a post-OTP token).
+- **[luke-forms](/libraries/forms)** — a file field only renders a clickable link for a **safe URL
+  scheme**, closing a stored-XSS vector where a prefilled `javascript:` file value became a working link.
+
+Two audit items are queued for a decision (an auth-engine proxy circuit-breaker, and the agents
+rate-limit trusted-proxy-hop count); the rest of the audit backlog is tracked for follow-up.
+
+The prior pass lifted **[luke-agents](/services/agents)** 88 → **92** (now #4) — twelve issues
 clearing its enterprise backlog end-to-end, top severity down. A **durable transcript write path**
 (an off-request-path retrying queue with a configurable pool, a graceful-shutdown flush, and drop
 counters) closed a silent data-loss hole where turns vanished on redeploy or pool exhaustion
