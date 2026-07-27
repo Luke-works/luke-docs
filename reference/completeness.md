@@ -88,7 +88,13 @@ safe, CI-green fix to **seven** of them in one sweep — security and reliabilit
   font-host allowlist, and added the first tests to the previously-uncovered render path.
 - **[luke-agents](/services/agents)** — brain errors no longer **leak the raw provider exception** (and a
   circuit-open 503 is preserved, not flattened to 502); Prometheus route labels use the matched template
-  so unmatched paths can't explode metric cardinality.
+  so unmatched paths can't explode metric cardinality. A **cost-control trio** then closed the AI-spend
+  gap end-to-end: **spoof-resistant client-IP** for the rate-limit key (real client = 2nd `X-Forwarded-For`
+  from the right, Cloudflare+Render verified — a rotated leftmost XFF can no longer mint fresh budget);
+  **token metering** (`agents_llm_tokens_total` + `llm.last_usage()`) that finally makes the fleet's
+  primary cost visible; and a **per-tenant daily token cap** on top of the rate limit, so a tenant spread
+  across many IPs/user_ids can't run up unbounded spend (off unless armed, ~$9/mo/tenant at the suggested
+  1M/day). Tier-aware limits + durable per-tenant token history are the deliberate next layer (billing).
 - **[luke-consumer-ui](/apps/consumer-ui)** — token refresh is now **single-flight** (parallel 401s no
   longer stampede `/auth/refresh` and rotate the cookie N times), and every auth/core fetch has a 30s
   timeout so a hung gateway can't spin the UI forever.
@@ -99,8 +105,9 @@ safe, CI-green fix to **seven** of them in one sweep — security and reliabilit
 - **[luke-forms](/libraries/forms)** — a file field only renders a clickable link for a **safe URL
   scheme**, closing a stored-XSS vector where a prefilled `javascript:` file value became a working link.
 
-Two audit items are queued for a decision (an auth-engine proxy circuit-breaker, and the agents
-rate-limit trusted-proxy-hop count); the rest of the audit backlog is tracked for follow-up.
+One audit item remains queued for a decision (an auth-engine proxy circuit-breaker); the agents
+rate-limit trusted-proxy-hop count has since been resolved (verified 2 hops = Cloudflare + Render).
+The rest of the audit backlog is tracked for follow-up.
 
 The prior pass lifted **[luke-agents](/services/agents)** 88 → **92** (now #4) — twelve issues
 clearing its enterprise backlog end-to-end, top severity down. A **durable transcript write path**
