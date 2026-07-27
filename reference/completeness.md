@@ -112,9 +112,13 @@ safe, CI-green fix to **seven** of them in one sweep — security and reliabilit
 - **[luke-forms](/libraries/forms)** — a file field only renders a clickable link for a **safe URL
   scheme**, closing a stored-XSS vector where a prefilled `javascript:` file value became a working link.
 
-One audit item remains queued for a decision (an auth-engine proxy circuit-breaker); the agents
-rate-limit trusted-proxy-hop count has since been resolved (verified 2 hops = Cloudflare + Render).
-The rest of the audit backlog is tracked for follow-up.
+Both audit items originally queued for a decision are now resolved: the agents rate-limit
+trusted-proxy-hop count (verified 2 hops = Cloudflare + Render) and the **auth-engine proxy
+circuit-breaker** (per-upstream, fails fast with 503 + Retry-After after repeated failures so a
+downstream outage can't drag the gateway down; default-lenient, disableable). Dependabot was also
+retargeted at `develop` across every service repo so its bump PRs actually ship to dev/qa (they were
+opening against `main`, which the services don't deploy). The rest of the audit backlog is tracked for
+follow-up.
 
 The prior pass lifted **[luke-agents](/services/agents)** 88 → **92** (now #4) — twelve issues
 clearing its enterprise backlog end-to-end, top severity down. A **durable transcript write path**
