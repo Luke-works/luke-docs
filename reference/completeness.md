@@ -104,9 +104,11 @@ safe, CI-green fix to **seven** of them in one sweep — security and reliabilit
   would let anyone forge a post-OTP token). The public embed/minion rate limiters now key off a
   **gateway-vouched `X-Real-Client-IP`** instead of a forgeable left-most `X-Forwarded-For`: the gateway
   resolves the true client IP (trusted-proxy-hops from the right) and stamps it, stripping any
-  client-supplied one — so an abuser can no longer rotate XFF to mint fresh IP buckets. Fully closed once
-  core's public surface is reachable only through the gateway (**edge lock-down — an operator infra step**);
-  until then it's no more forgeable than before, and the honest gateway path is already hardened.
+  client-supplied one — so an abuser can no longer rotate XFF to mint fresh IP buckets. A companion
+  **`PublicGatewayAuthFilter`** then locks `/api/public/**` + `/embed*` to **gateway-only**: with a shared
+  `GATEWAY_VOUCH_SECRET` the gateway stamps an `X-Gateway-Auth` proof-of-origin and core 404s any direct hit
+  (incl. the raw `*.onrender.com` URL a CDN rule can't cover) — closing the back door in code, no infra rule
+  needed. Default-open (unset ⇒ pass-through), so arming it is one env var on both services (gateway first).
 - **[luke-forms](/libraries/forms)** — a file field only renders a clickable link for a **safe URL
   scheme**, closing a stored-XSS vector where a prefilled `javascript:` file value became a working link.
 
