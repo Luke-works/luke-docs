@@ -62,7 +62,7 @@ All tables live in the core engine's capability schema (`com.luke.engine.capabil
 | --- | --- | --- |
 | `FormDefinition` (`luke_form_definitions`) | `id`, `@Version version`, `code` (FM-XXXX-DDMMMYY, unique per tenant), `name`, `kind` (INBOUND/OUTBOUND), `submissionHandling`, `outboundRolesJson`, `status` (DRAFT/PUBLISHED/RETIRED), `publishedVersion`, `draftSchema`, `allowedEmbedOrigins`, `embedKeyVersion`, `lockedBy`/`lockedAt`, `deletedAt`, `lastTestedAt` | The versioned, tenant-scoped form template. Editable working draft in `draftSchema`; `publishedVersion` is what consumers resolve. JPA `@Version` gives optimistic locking (concurrent draft saves → 409). |
 | `FormVersion` (`luke_form_versions`) | `id`, `formId`, `version` (unique per form), `schema` (immutable), `checkedInBy`/`checkedInAt`, `signedOffAt`/`signedOffBy` | An immutable checked-in snapshot — the artifact a renderer/process resolves and never changes underneath them. Publish is gated on `signedOffAt` being set. |
-| `FormInstance` (`luke_form_instances`) | `id`, `token` (unique, opaque URL handle), `definitionCode` + `version` (pinned), `state`, `prefill`/`data`/`recipient`/`context` (JSON maps), `expiresAt`, `submittedAt` | A concrete runtime occurrence: hosted submission, prefilled invitation, or task-bound fill. `context` links back to `processInstanceId`/`taskId`/`businessKey`. |
+| `FormInstance` (`luke_form_instances`) | `id`, `token` (unique, opaque URL handle), `definitionCode` + `version` (pinned), `state`, `prefill`/`data`/`recipient`/`context` (JSON maps), `recipientEmail`/`recipientPhone` (denormalised + indexed, kept in sync by `setRecipient`), `expiresAt`, `submittedAt` | A concrete runtime occurrence: hosted submission, prefilled invitation, or task-bound fill. `context` links back to `processInstanceId`/`taskId`/`businessKey`. The denormalised `recipientEmail` powers the portal's "forms assigned to me" query. |
 | `FormSubmissionOutbox` (`luke_form_submission_outbox`) | `id`, `businessKey` (= instance id, unique/idempotent), `formInstanceId`, `processBusinessKey` (SM-…), `formDataJson`, `formMetaJson`, `status` (QUEUED/PUBLISHED/FAILED), `processInstanceId`, `retryCount` | Transactional outbox for submit → Camunda process start. Written in the same tx as the SUBMITTED state; drained off-thread. |
 | `FormEventOutbox` (`luke_form_event_outbox`) | `id`, `eventType` (lower-cased state, e.g. `submitted`), `formCode`, `instanceId`, `payloadJson`, `state` (QUEUED/SENT/SKIPPED/FAILED), `retryCount` | Transactional outbox for the forms → workflow event rail. A lifecycle change enqueues a QUEUED row; the correlator starts subscribed workflows / advances waiting message catches. |
 | `FormAuditEvent` (`luke_form_audit`) | `id`, `formId`, `action` (created/checked_in/tested/published/archived/…), `detail`, `actor`, `at` | Immutable activity feed for a definition's lifecycle. |
@@ -149,6 +149,16 @@ Outbound definitions (`kind = OUTBOUND`) are never embeddable — a preparer pre
 - `OutboundSendController.send` (`POST /api/form-definitions/{id}/send`) → `OutboundSendService.send`: creates a prefilled `FormInstance` with `recipient` identity, returns the opaque token + recipient link, and best-effort emails the recipient ("Please complete: …") — the send never fails on email.
 - Recipient access is OTP-gated: `PublicFormInstanceService.requestOtp` mails a `FormRecipientOtp` code; `verify` marks the instance OPENED and mints a short-lived access token (`RecipientAccessTokens`); `render`/`save`/`submit` require it. The public API (`PublicFormInstanceController` at `/api/public/form-instances/**`) never leaks whether a token exists.
 
+### Recipient portal (forms is the first provider)
+
+Beyond the single-link `/respond/{token}` flow, a recipient can visit a **per-tenant portal** and see *every* open item assigned to their email — forms today, other capabilities next. The portal is a **separate, capability-agnostic surface** (core-engine module `com.luke.engine.recipient`, front-end app **[luke-portal](/apps/portal)**); it owns recipient identity, and each capability contributes items through the `RecipientItemProvider` SPI. **Forms is the first provider.**
+
+- `FormRecipientItemProvider` maps every open outbound `FormInstance` for `(tenant, email)` into a `"form"` portal item (querying the denormalised `recipientEmail`), and supplies the recipient phone for the SMS channel. That is the only forms-specific piece.
+- The portal session (`PortalAccessTokens`, email-scoped) authorises the existing forms fill surface unchanged: `PublicFormInstanceService.authorize()` accepts *either* a per-instance `RecipientAccessToken` *or* a portal session whose tenant + recipient email match — so `render`/`save`/`submit` are reused, and a session for tenant A / email X can never reach another tenant's or another email's forms.
+- Outbound sends include the portal link (`/portal/{tenantToken}`) alongside the direct `/respond` link.
+
+See **[Recipient Portal](/apps/portal)** for the identity flow (email/SMS OTP + magic link), the SPI, and the standalone app.
+
 ## Component reference
 
 | Component | Type | Responsibility | Key methods |
@@ -157,7 +167,8 @@ Outbound definitions (`kind = OUTBOUND`) are never embeddable — a preparer pre
 | `FormInstanceController` | controller | Authenticated instance management (internal) | `create`, `list`, `submit`, `retryProcess`, `setState`, `send`, `cancel`, `processed` |
 | `FormEmbedController` | controller (public) | Inbound embed render + submit with abuse guards | `render`, `submit`, `rateLimit` |
 | `PublicFormInstanceController` | controller (public) | OTP-gated recipient respond flow | `otp`, `verify`, GET/PATCH `{token}`, `submit` |
-| `OutboundSendController` | controller | Send an outbound form to a recipient | `send` |
+| `FormRecipientItemProvider` | provider | Forms as the first recipient-portal `RecipientItemProvider` — open instances → `"form"` items | `itemsFor`, `phoneFor` |
+| `OutboundSendController` | controller | Send an outbound form to a recipient (incl. the portal link) | `send` |
 | `EmbedPageController` / `RespondPageController` | controller | Serve engine-hosted `/embed` and `/respond` HTML shells with per-form CSP | `page` |
 | `FormSubmissionService` | service | Durable submit → process-start bridge (outbox) | `submit`, `reEnqueue`, `enqueue` |
 | `FormSubmissionOutboxConsumer` | service | Drains submission outbox, starts Camunda process | `drain`, `process` |
@@ -194,9 +205,11 @@ Outbound definitions (`kind = OUTBOUND`) are never embeddable — a preparer pre
 | GET | `/respond/{token}` | Engine-hosted respond page | Public |
 | POST | `/api/public/form-instances/{token}/otp` · `/verify` | Recipient OTP challenge / verify | Public (token) |
 | GET/PATCH/POST | `/api/public/form-instances/{token}` · `/submit` | Recipient render / autosave / submit | Public (token + access token) |
+| GET | `/portal/{tenantToken}` | Engine-hosted recipient portal page | Public (origin-gated) |
+| — | `/api/public/portal/**` · `/portal/{tenantToken}` | Recipient portal identity + item listing (capability-agnostic) | See [Recipient Portal](/apps/portal) |
 
 ## Status & gaps
 
-Production-ready across authoring, inbound embed, and outbound respond, all backed by transactional outboxes and per-tenant isolation. See the [Completeness Scorecard](/reference/completeness) for the fleet-wide status view.
+Production-ready across authoring, inbound embed, outbound respond, and the recipient portal, all backed by transactional outboxes and per-tenant isolation. The portal's **SMS OTP** channel is wired behind a seam but inert until an SMS gateway is configured (`luke.forms.sms.enabled` + a real `SmsPortalOtpSender`); email OTP and magic link are live. See the [Completeness Scorecard](/reference/completeness) for the fleet-wide status view.
 
-- Cross-links: [Forms library](/libraries/forms) · [Core Engine](/services/core-engine) · [Consumer UI](/apps/consumer-ui)
+- Cross-links: [Forms library](/libraries/forms) · [Core Engine](/services/core-engine) · [Consumer UI](/apps/consumer-ui) · [Recipient Portal](/apps/portal)
