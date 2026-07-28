@@ -65,10 +65,28 @@ vendored copy always wins. The currently vendored packages are:
 | Signatures | `sign-core`, `sign-react` |
 | Workflow | `workflow-core`, `workflow-builder` |
 
-The ship flow is: build the package in its monorepo, copy `index.{js,cjs,d.ts,d.cts}`
-+ `styles.css` into `vendor/@lukeflow/<pkg>/dist`, then `npm run build` here.
-Because `tsc -b` runs first, a passing build confirms the vendored public types
-still resolve against the app.
+The ship flow for the **Forms** packages is scripted: `npm run vendor:forms` builds
+nothing itself but copies the whole `dist/` of each package out of a sibling
+`luke-forms` checkout (override with `LUKE_FORMS_DIR`), derives each vendored
+`package.json` from source, refreshes `public/embed.js` from the embed SDK's IIFE
+build, and writes `vendor/@lukeflow/.vendor-manifest.json` with a per-file SHA-256.
+`npm run vendor:check` re-verifies that manifest and **gates CI**.
+
+::: tip Why the whole dist, not a file list
+Vendoring used to copy a hand-picked list of files with a hand-maintained
+`package.json`, and it lost things silently — twice. It dropped `form-core`'s
+`./quickjs` subpath, so the isolated-JS evaluator was built and tested upstream but
+never arrived (nothing failed; the capability was just absent). And it left
+`form-react` a commit stale, so an upstream stored-XSS fix sat unvendored for days.
+Neither is the kind of mistake more care prevents — a copy step with no verifier
+can't tell you what it failed to copy. Copying the whole `dist`, deriving `exports`
+from source, and asserting every advertised subpath exists means an entry point
+can't be lost in transit; the manifest check catches hand-edits and partial copies.
+:::
+
+The other package groups still use the manual copy (`index.{js,cjs,d.ts,d.cts}` +
+`styles.css`). Either way, `npm run build` runs `tsc -b` first, so a passing build
+confirms the vendored public types still resolve against the app.
 
 ### App sections & capabilities
 
@@ -161,6 +179,8 @@ npm run test:e2e   # playwright test — end-to-end specs
 Re-vendoring a headless package's bundle (from its monorepo build):
 
 ```bash
+npm run vendor:forms     # copy form-* dist + public/embed.js from ../luke-forms, write the manifest
+npm run vendor:check     # verify vendor/@lukeflow matches its manifest (this is what CI runs)
 npm run vendor:respond   # build:respond + copy bundle into vendor/
 npm run vendor:embed     # build:embed  + copy bundle into vendor/
 ```
@@ -172,10 +192,10 @@ Playwright specs (`screens`, `flows`, `smoke`, `forms-builder-overflow`). The
 renders without crashing or horizontal overflow.
 
 ::: warning CI is gating
-CI (`ci.yml`) runs on Node 22: type-check + build, then unit tests, then
-`eslint . --max-warnings 0`. Any error *or* warning fails the build. CodeQL and a
-security scan also run; the e2e suite runs hermetically (Vite dev server + stubbed
-gateway calls) in a separate workflow.
+CI (`ci.yml`) runs on Node 22: `vendor:check`, then type-check + build, then unit
+tests, then `eslint . --max-warnings 0`. Any error *or* warning fails the build.
+CodeQL and a security scan also run; the e2e suite runs hermetically (Vite dev
+server + stubbed gateway calls) in a separate workflow.
 :::
 
 ## Deployment

@@ -152,6 +152,25 @@ dev/qa run with `SPRING_PROFILES_ACTIVE=postgres` and default-lenient guards. Pr
 The `prod` profile intentionally refuses to boot if required secrets (internal shared secret, secrets master key, real embed HMAC, capability-operator credentials, gateway JWKS) are absent. Switch to `postgres,prod` only *after* every `sync:false` secret is set, or the service will (by design) fail to start.
 :::
 
+### Submission validation
+
+Form submissions arrive through three doors — the public embed webhook, the OTP recipient portal, and the authenticated in-app fill — and all three funnel through `FormSubmissionService.submit`. The server-side backstop runs **there**, at that single choke point, rather than per-controller, so a submit path added later inherits it and cannot silently skip it.
+
+Against the schema the instance pinned (its own version, never the definition's current one), every submission is:
+
+| Check | Behaviour |
+|---|---|
+| Unknown keys | Stripped — only schema-declared fields reach process variables |
+| Required fields | 400, except where the server can't know a field was shown (conditional / hidden / computed / non-persistent) |
+| Declarative rules | Length, words, pattern, email/url, numeric + date/time bounds, counts, file size — mirroring `@lukeflow/form-core` |
+| Option membership | Submitted choice must be one the schema declares (server-only; the browser constrains this by UI alone) |
+| Size + depth | Field count, string length, collection size and nesting caps → 413 |
+| Control characters | Stripped from strings and nested object keys |
+
+Autosave uses a **draft mode** that strips and bounds but never enforces `required` or value shape — a half-filled form is the normal state of a draft, not an error.
+
+The declarative rules exist twice: in TypeScript (browser) and Java (server). `luke-forms/fixtures/validation-parity.json` is a shared case table run against both implementations, and carries a `revision` the Java test pins so a rule changed in one language only fails at review. Expressions, author JS, and async/minion validation are **deliberately client-only** — the server never evaluates them.
+
 See [Deployment Topology](/concepts/deployment) for how this service fits the wider fleet.
 
 ## Status & gaps
