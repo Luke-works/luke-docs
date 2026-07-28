@@ -3,3 +3,9 @@ node_modules/
 .vitepress/dist/
 *.log
 .DS_Store
+
+# Never commit environment files — a stray .env of live
+# credentials was caught on its way into this repo once.
+.env
+.env.*
+!.env.example

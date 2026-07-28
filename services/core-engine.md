@@ -34,7 +34,7 @@ Each module owns its own tables (Flyway-managed) and REST surface. Modules are w
 |---|---|---|
 | **form** | `capability/form`, `form` | Form definitions, versions, submissions, embed tokens, event rail, submission PDFs, outbound send; contributes to the recipient portal via `FormRecipientItemProvider` |
 | **recipient** | `recipient` | Capability-agnostic recipient **portal** identity — per-tenant, account-less, authenticate-once (email/SMS-OTP + magic link), email-scoped sessions; aggregates open items across capabilities via the `RecipientItemProvider` SPI (front-end: **luke-portal**) |
-| **email** | `capability/email` | Email capability data layer |
+| **email** | `capability/email` | Email capability data layer — sending, OTP domain verification, per-tenant Postmark server, and inbound/outbound **email boxes**. Outbound boxes get a dedicated Postmark stream; inbound mail arrives via a public webhook (`/api/public/email/inbound/{token}`), is stored, and can trigger a workflow (`email.inbound`) |
 | **emailtemplate** | `capability/emailtemplate` | Bounded email-template documents / assets |
 | **phone** | `capability/phone` | Vapi.ai inbound/outbound voice-call records and webhooks |
 | **signature** | `capability/signature` | Native PAdES e-sign ceremonies and signed-document state |

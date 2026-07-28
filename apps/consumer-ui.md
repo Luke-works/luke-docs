@@ -132,7 +132,9 @@ part of the platform's headless WorkOS-based auth. See
 - **Form designer & runtime** — visual builder (`FormBuilderPage`), preview, fill,
   inbox, instances, responses, embed and send panels, plus an AI assist panel.
 - **Email** — template list + visual/AI builder (`EmailTemplateBuilderPage`) and an
-  email section, built on react-email components.
+  email section, built on react-email components. Once a domain is verified, the Email
+  page also registers **email boxes** — inbound (receive, workflow-triggering) or
+  outbound (send, dedicated Postmark stream) addresses on the sender domain.
 - **Signatures** — signature template builder, list, and the public signing page
   (post-MVP; hidden behind a flag).
 - **Phone** — call list and detail views for the Vapi-backed voice capability

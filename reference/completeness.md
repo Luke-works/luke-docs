@@ -252,6 +252,11 @@ enforceable gates as forms/email.
   marketing-ui (not a git repo) and the deprecated task-engine lack CI.
 - **Docs improving** — file-proxy now has a README; consumer-ui (62) is the main remaining
   under-documented large surface.
+- **Observability is the fleet-wide gap** — strong *security* monitoring (weekly SAST/CodeQL/ZAP,
+  Dependabot) and basic *liveness* (Actuator + Render health checks). Prometheus metrics and
+  backend Sentry are now wired on every JVM service, but **nothing collects or alerts on them**
+  and no DSN is provisioned, so in practice nothing still tells a human. Tracked as
+  OBSERVABILITY V1 — see [Observability](/operations/observability).
 
 ## Highest-impact fixes (remaining)
 
@@ -267,6 +272,9 @@ everything below is post-MVP polish or targets deferred capabilities.*
 4. Enable **WorkOS Directory Sync** for a pilot tenant so auth-engine's deprovisioning webhook
    can act on `dsync.*` deactivations — the only remaining piece of #38 (the `user.deleted`
    leaver loop and the central-enforcement migration of #29 both shipped).
+5. Finish **observability** — the code half is done (Prometheus + backend Sentry on every JVM
+   service); what remains is provisioning: an external uptime monitor, a Sentry DSN, and a
+   collector to scrape the metrics. See [Observability](/operations/observability).
 
 ::: info Method
 Scores come from an evidence-based audit of each repo (README, build files, CI, test counts,
