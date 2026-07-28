@@ -92,8 +92,8 @@ safe, CI-green fix to **seven** of them in one sweep — security and reliabilit
   correlation-id / download headers cross-origin, and has typed connect/request timeouts that surface a
   slow engine as **504** (not a mislabeled 502).
 - **[luke-email](/libraries/email)** — `validateEmailDoc` now **blocks Mustachio raw-output/section
-  syntax** (`{{{x}}}`, `{{&x}}`, `{{#s}}…{{/s}}`), which would otherwise inject unescaped markup into the
-  *delivered* email (the escaping contract only covered `{{var}}`).
+  syntax** (<span v-pre>`{{{x}}}`</span>, <span v-pre>`{{&x}}`</span>, <span v-pre>`{{#s}}…{{/s}}`</span>), which would otherwise inject unescaped markup into the
+  *delivered* email (the escaping contract only covered <span v-pre>`{{var}}`</span>).
 - **[luke-file-proxy](/services/file-proxy)** — closed an **SSRF** in the Chromium PDF render (user form
   data/theme could make the browser GET a cloud-metadata endpoint) via deny-by-default egress with a
   font-host allowlist, and added the first tests to the previously-uncovered render path.
