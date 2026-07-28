@@ -73,6 +73,17 @@ externalized to the standalone luke-tasks / TLM product.
 **Fleet average overall ≈ 81%.**
 
 ::: tip Recent uplifts
+**Production-readiness prep (2026-07-27/28).** With MVP hardening done, go-live is being staged as three
+tracked verticals in `luke-platform` — Observability ([#13](https://github.com/Luke-works/luke-platform/issues/13)),
+Prod cutover ([#14](https://github.com/Luke-works/luke-platform/issues/14)), WorkOS→Prod RBAC
+([#15](https://github.com/Luke-works/luke-platform/issues/15)). Shipped so far: backend **metrics + Sentry**
+live on dev (env-gated) with a Grafana Alloy operator kit; a **prod-cutover runbook + host-parameterized smoke
+test** (validated live on dev) + go/no-go checklist; and a **complete production blueprint** (`render.prod.yaml`
+— all 7 services + a dedicated `luke-prod-db`). This is *prep, not prod*: the fleet is still not prod-deployed
+(the whole hardening effort lives on `develop`; `main` = current prod), consistent with the FluxNova-prod-migration
+gap above. WorkOS role sync (#15) is **deferred by design** — authorization is engine-owned, so it is an arming
+convenience, never a dependency.
+
 A **fleet-wide autonomous hardening pass** (2026-07-25) audited all MVP-critical repos and shipped a
 safe, CI-green fix to **seven** of them in one sweep — security and reliability, each with tests:
 
