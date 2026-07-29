@@ -28,9 +28,9 @@ Four npm-workspace packages, published (privately) and versioned together. Each 
 
 | Package | Owns | Public surface |
 |---------|------|----------------|
-| `@lukeflow/form-core` | The headless engine — schema contract, dependency-graph + topological settlement, validation registry, field-type registry, the safe expression parser and the JS logic layer, the Minions data-source contract, and the pure builder operations. No React, no DOM. | `createFormEngine`, `validateSchema` / `repairSchema` / `migrateSchema`, builder ops, expression + JS evaluators, data-source helpers |
+| `@lukeflow/form-core` | The headless engine — schema contract, dependency-graph + topological settlement, validation registry, field-type registry, the safe expression parser and the JS logic layer, the Minions data-source contract, the pure builder operations, and the design-time **data-contract** derivation. No React, no DOM. | `createFormEngine`, `validateSchema` / `repairSchema` / `migrateSchema`, builder ops, expression + JS evaluators, data-source helpers, `deriveDataContract` |
 | `@lukeflow/form-react` | The React adapter + reference renderer — a complete, a11y-wired `<FormRenderer>` for the full field set, plus i18n, theming, an error boundary, and print/PDF. | `FormRenderer`, `useFormEngine`, `MinionProvider` / `useMinionData`, `LocaleProvider` |
-| `@lukeflow/form-builder` | The visual designer — palette, canvas, settings panel, Problems panel, and a live preview built on the headless builder ops and WAI-ARIA keyboard drag-and-drop. | `FormBuilder`, `useFormBuilder` |
+| `@lukeflow/form-builder` | The visual designer — palette, canvas, settings panel, Problems panel, a **Data Structure** view (design-time data contract), and a live preview built on the headless builder ops and WAI-ARIA keyboard drag-and-drop. | `FormBuilder`, `useFormBuilder`, `DataStructureView` |
 | `@lukeflow/form-embed` | A zero-dependency SDK to embed a form on any site via a cross-origin iframe and a secure `postMessage` bridge (ships an IIFE `embed.js` global). | `index` API, `embed.js` |
 
 The dependency direction is strict: `form-core` ← `form-react` ← `form-builder`; `form-embed` is standalone. React is a **peer dependency** (`react >=18`, built against React 19) and is externalized from every bundle, so the consuming app keeps a single React copy.
@@ -48,6 +48,7 @@ The packages are published to a private registry via changesets, but in practice
 - **Two logic tiers** — a safe expression grammar (default, untrusted-author-safe) and a trusted-author JavaScript layer (`calculateValueJs` / `customConditionalJs` / `customValidationJs` / `customDefaultValueJs`), gateable and sandboxable (see [Security & accessibility](#security-accessibility)).
 - **Minions** — a secure data-source contract: fields fetch options, type-ahead results, file storage, and async validation through a host-provided `MinionClient` whose auth/authz live entirely server-side.
 - **Wizard forms**, localization (`LocaleProvider`), CSS-token theming, resume-from-snapshot (`serialize` / `restore`), schema migrations, an evaluation trace, an error boundary, an `onEvent` observability hook, print/PDF (`printSubmission`), autofill suppression, and a leave-guard.
+- **Data Structure view** — a design-time `Design ⇄ Data` toggle in the builder that shows the data contract a form produces: every field's submission key, value type (`string` / `number` / `string[]` / `row[]` / `object` …), how it accepts input, and its constraints, beside an example submission payload. Backed by the pure `deriveDataContract(schema)` in form-core, which mirrors the runtime submission shape (grids nest as `row[]`, layout containers flatten, `addressBlock` expands, `persistent:false` excluded) — so what it shows is exactly what an integration receives.
 - **`content-visibility`-based virtualization** (`virtualize`) for long forms — off-screen rows skip layout and paint but stay in the DOM, so focus-on-error, tab order, browser Find, and validation all keep working (unlike JS windowing).
 
 ## Security & accessibility
@@ -109,7 +110,7 @@ npm run e2e           # 15 Playwright specs (incl. axe-core a11y)
 npm run bench         # engine perf benchmark (see docs/BENCHMARKS.md)
 ```
 
-The test suite is deep: ~570 tests over 36 files, including property-based **fuzz** suites (`engine.fuzz`, `security.fuzz` — 30+ escape/RCE/pollution attempts plus hundreds of random inputs), **perf** tests, and **golden** schema tests. The 15 E2E specs cover the renderer, builder, wizard, grid, keyboard nav, minions, signature, and accessibility.
+The test suite is deep: ~585 tests over 38 files, including property-based **fuzz** suites (`engine.fuzz`, `security.fuzz` — 30+ escape/RCE/pollution attempts plus hundreds of random inputs), **perf** tests, and **golden** schema tests. The 15 E2E specs cover the renderer, builder, wizard, grid, keyboard nav, minions, signature, and accessibility.
 
 CI runs three jobs on every push/PR:
 
