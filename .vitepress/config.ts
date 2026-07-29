@@ -13,7 +13,10 @@ export default withMermaid(defineConfig({
   cleanUrls: true,
   lastUpdated: true,
   // Pages cross-link liberally; don't fail the build on an in-progress link.
-  ignoreDeadLinks: true,
+  // Dead links FAIL the build. The manual's value is that its cross-references are
+  // trustworthy; a link that 404s is worse than no link, because it reads as verified.
+  // Verified at zero dead links when this was turned on — it costs nothing to keep true.
+  ignoreDeadLinks: false,
 
   head: [
     ['meta', { name: 'theme-color', content: '#0b6bcb' }],
