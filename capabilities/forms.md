@@ -62,7 +62,7 @@ All tables live in the core engine's capability schema (`com.luke.engine.capabil
 | --- | --- | --- |
 | `FormDefinition` (`luke_form_definitions`) | `id`, `@Version version`, `code` (FM-XXXX-DDMMMYY, unique per tenant), `name`, `kind` (INBOUND/OUTBOUND), `submissionHandling`, `outboundRolesJson`, `status` (DRAFT/PUBLISHED/RETIRED), `publishedVersion`, `draftSchema`, `allowedEmbedOrigins`, `embedKeyVersion`, `showBranding`, `embedVersionMode`/`embedVersion`, `lockedBy`/`lockedAt`, `deletedAt`, `lastTestedAt` | The versioned, tenant-scoped form template. Editable working draft in `draftSchema`; `publishedVersion` is what consumers resolve. JPA `@Version` gives optimistic locking (concurrent draft saves → 409). |
 | `FormVersion` (`luke_form_versions`) | `id`, `formId`, `version` (unique per form), `schema` (immutable), `checkedInBy`/`checkedInAt`, `signedOffAt`/`signedOffBy` | An immutable checked-in snapshot — the artifact a renderer/process resolves and never changes underneath them. Publish is gated on `signedOffAt` being set. |
-| `FormInstance` (`luke_form_instances`) | `id`, `token` (unique, opaque URL handle), `definitionCode` + `version` (pinned), `state`, `prefill`/`data`/`recipient`/`context` (JSON maps), `recipientEmail`/`recipientPhone` (denormalised + indexed, kept in sync by `setRecipient`), `expiresAt`, `submittedAt`, `submittedIp`/`submittedUserAgent`/`submittedVia` | A concrete runtime occurrence: hosted submission, prefilled invitation, or task-bound fill. `context` links back to `processInstanceId`/`taskId`/`businessKey`. The denormalised `recipientEmail` powers the portal's "forms assigned to me" query. |
+| `FormInstance` (`luke_form_instances`) | `id`, `token` (unique, opaque URL handle), `definitionCode` + `version` (pinned), `state`, `prefill`/`data`/`recipient`/`context` (JSON maps), `recipientEmail`/`recipientPhone` (denormalised + indexed, kept in sync by `setRecipient`), `expiresAt`, `submittedAt`, `submittedIp`/`submittedUserAgent`/`submittedVia`, `consentText`/`consentAgreedAt` | A concrete runtime occurrence: hosted submission, prefilled invitation, or task-bound fill. `context` links back to `processInstanceId`/`taskId`/`businessKey`. The denormalised `recipientEmail` powers the portal's "forms assigned to me" query. |
 | `FormSubmissionOutbox` (`luke_form_submission_outbox`) | `id`, `businessKey` (= instance id, unique/idempotent), `formInstanceId`, `processBusinessKey` (SM-…), `formDataJson`, `formMetaJson`, `status` (QUEUED/PUBLISHED/FAILED), `processInstanceId`, `retryCount` | Transactional outbox for submit → Camunda process start. Written in the same tx as the SUBMITTED state; drained off-thread. |
 | `FormEventOutbox` (`luke_form_event_outbox`) | `id`, `eventType` (lower-cased state, e.g. `submitted`), `formCode`, `instanceId`, `payloadJson`, `state` (QUEUED/SENT/SKIPPED/FAILED), `retryCount` | Transactional outbox for the forms → workflow event rail. A lifecycle change enqueues a QUEUED row; the correlator starts subscribed workflows / advances waiting message catches. |
 | `FormAuditEvent` (`luke_form_audit`) | `id`, `formId`, `action` (created/checked_in/tested/published/archived/…), `detail`, `actor`, `at` | Immutable activity feed for a definition's lifecycle. |
@@ -188,9 +188,12 @@ See **[Recipient Portal](/apps/portal)** for the identity flow (email/SMS OTP + 
 ## Submission provenance (what makes a submission enforceable)
 
 Every submission records **who submitted, from where, and when** — the evidence a completed form needs
-to be relied on. It is captured at the request edge (`SubmissionSource.from(request, via)`) and written
-by `FormSubmissionService.submit`, the single choke point **all three doors** funnel through, so a
-submit path added later inherits it and cannot silently skip it.
+to be relied on. It is captured at the request edge (`SubmissionSource.from(request, via, consentAgreed)`)
+and written by `FormSubmissionService.submit`, the single choke point **all three doors** funnel through,
+so a submit path added later inherits it and cannot silently skip it.
+
+For the part that shows **what the person agreed to** — the consent record — see
+[Consent record](#consent-record-the-legally-binding-part) below.
 
 | Field | Meaning |
 | --- | --- |
@@ -209,10 +212,60 @@ three places so they can be reconciled:
 ::: warning What an IP does and doesn't prove
 Record it as *"the address we observed"*, not as proof of identity: IPs are shared, proxied and
 reassigned. The strongest attribution in the platform is the outbound flow's **email OTP** — the
-recipient proved control of an address — with the IP as corroboration. Note also that an IP is
-**personal data** under GDPR/CCPA; it inherits the instance's retention, so purging an instance purges
-its provenance.
+recipient proved control of an address — with the IP as corroboration, and the
+[consent record](#consent-record-the-legally-binding-part) for what was actually accepted. Note also
+that an IP is **personal data** under GDPR/CCPA; it inherits the instance's retention, so purging an
+instance purges its provenance.
 :::
+
+## Consent record (the legally binding part)
+
+Provenance says where a submission came from. The **consent record** says what the person accepted — the
+piece that turns a stored response into something enforceable.
+
+A form opts in via **Form settings → Legal → "Require the filler to accept an agreement"**, which writes
+the statement into the **versioned schema settings**:
+
+```json
+{ "settings": { "consent": { "enabled": true, "text": "I agree to the Acme terms…" } } }
+```
+
+Versioned, not form metadata — deliberately. Enforceability rests on proving *which* wording someone was
+shown, so the statement is pinned to the version they filled: changing it re-gates sign-off/publish like
+any field edit, and an instance created against v3 keeps v3's wording for ever.
+
+### How it is enforced
+
+| Step | Where |
+| --- | --- |
+| The filler sees the statement and must tick it | `FormConsentGate`, rendered **above** the form on every fill surface (embed, respond page, recipient portal, in-app fill) |
+| The client sends **only the tick** (`consentAgreed: true`) | the submit body of each door |
+| The server reads the **wording** from the schema of the version *it served* | `ConsentTerms.requiredText(schemaJson)` |
+| A submission without agreement is **refused (400)** | `FormSubmissionService.submit` — the one choke point |
+| The exact statement + timestamp are written once | `FormInstance.consentText` / `consentAgreedAt` |
+
+The client never sends the wording. That is the whole point: a tampered browser can change what it
+*displays*, but not what gets *recorded*, so the stored statement always matches what the served form
+actually asked.
+
+::: tip Fail-closed, in three places
+1. A door that reports no consent state (`source == null`, or an old client omitting the field) is
+   **refused**, not waived — so a submit path added later cannot quietly skip the gate.
+2. A form with consent **on but no wording** still requires agreement, against `ConsentTerms.DEFAULT_TEXT`.
+   Silently waiving it is the one failure mode that would cost a tenant their evidence, so it can't
+   happen. The builder seeds the statement when you switch consent on, and warns if you clear it.
+3. `CONSENT_DEFAULT_TEXT` in consumer-ui and luke-portal is byte-identical to the server's — if they
+   drifted, a filler would agree to one statement while another was recorded.
+:::
+
+Where the record lands (same three places as the rest of the provenance, so they reconcile):
+the `FormInstance` row (quoted verbatim under "Submission record"), the immutable `formMetaData`
+snapshot (`consent.text` / `consent.agreedAt` — omitted entirely when no agreement was required, so
+absent means "not required", never "not captured"), and the **submission PDF**, as a quoted block.
+
+`consentText` being null on an existing row means the form asked for nothing, or the row predates the
+feature (V21 deliberately does **not** backfill) — never that someone declined, since such a submission
+never persisted.
 
 ## Embed version control ("Update embeds")
 
@@ -260,6 +313,24 @@ The authoritative "who may frame this form" remains `allowedEmbedOrigins`, enfor
 CSP `frame-ancestors`. The list annotates each origin with `allowed` so an author can spot a site the
 policy is blocking — but it must never become the gate.
 :::
+
+## Form settings dialog
+
+Everything about a form that isn't a field lives behind the **gear icon** next to the form name in the
+builder toolbar, split into five tabs (`FormSettingsModal`):
+
+| Tab | Contents | Save model |
+| --- | --- | --- |
+| **General** | Name, description, form ID, created/last-edited by | Metadata — **Save** button |
+| **Submission** | Submission message, file attachments, "save submission as Attachment" (PDF) | Versioned schema — autosaves |
+| **Legal** | Require an agreement + its wording, plus what is always recorded | Versioned schema — autosaves |
+| **Appearance** | Form font (with preview), "Developed at Lukeflow" badge | Font: versioned schema · badge: metadata |
+| **Activity** | The form's audit feed (`FormAuditEvent`) | Read-only |
+
+The two save models are stated in the dialog footer rather than implied: **versioned schema** settings
+autosave and re-gate sign-off/publish (they are part of what gets published), while **metadata** applies
+to the live form immediately with no re-publish. Editing any of it requires a checkout, matching the
+builder canvas.
 
 ## Form font
 

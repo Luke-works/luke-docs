@@ -42,6 +42,7 @@ Each module owns its own tables (Flyway-managed) and REST surface. Modules are w
 | **access** | `capability/access` | Capability access requests, orchestrated approval, and grants |
 | **secrets** | `capability/secrets` | Encrypted per-tenant secret storage |
 | **capability** | `capability/capability` | Capability catalog / subscription and tier gating |
+| **forms — consent** | `capability.form` | `ConsentTerms` reads a form's required agreement from the served version's schema (`settings.consent`); `FormSubmissionService.submit` refuses (400) any submission that arrives without it and snapshots the exact wording onto the instance. Fail-closed: a door reporting no consent state, or a form enabled with blank wording, still requires agreement. See [Forms → Consent record](/capabilities/forms#consent-record-the-legally-binding-part) |
 | **branding** | `branding` | Per-tenant commercial plan (`luke_tenant_plan`, FREE\|PAID — absent row = FREE) and `BrandingPolicy`, the single home for the "Developed at Lukeflow" badge rule on public form surfaces. Operator-only `PUT /api/tenants/{id}/plan` is the seam real billing will write to. See [Forms](/capabilities/forms#developed-at-lukeflow-badge) |
 | **minion** | `capability/minion` | Background worker / helper tasks |
 | **config** | `capability/config` | Capability-level configuration |

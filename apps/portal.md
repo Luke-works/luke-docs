@@ -98,6 +98,13 @@ says to (`showBranding`, resolved server-side against the tenant's plan) — the
 surface like `/respond/{token}`, so a recipient sees the same attribution either way. See
 [Forms](/capabilities/forms#developed-at-lukeflow-badge).
 
+It is also a full **fill** surface, so a form requiring consent shows its agreement here too
+(`FormConsentGate` + `lib/formConsent.ts`, mirrors of the consumer-ui originals — the portal is a
+separate bundle with no shared package, like `LukeflowBadge` and `formFonts`). The gate is a courtesy:
+core-engine refuses a submission that arrives without agreement whichever door it came through. Keep
+`CONSENT_DEFAULT_TEXT` byte-identical to the server's, or a recipient could agree to one statement while
+another is recorded. See [Forms → Consent record](/capabilities/forms#consent-record-the-legally-binding-part).
+
 To add a capability:
 
 1. Implement `RecipientItemProvider` in that capability's package (backend).
