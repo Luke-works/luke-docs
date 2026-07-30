@@ -64,6 +64,7 @@ vendored copy always wins. The currently vendored packages are:
 | Email | `email-core`, `email-react`, `email-builder` |
 | Signatures | `sign-core`, `sign-react` |
 | Workflow | `workflow-core`, `workflow-builder` |
+| Analytics | `analytics-core`, `analytics-react` |
 
 The ship flow for the **Forms** packages is scripted: `npm run vendor:forms` builds
 nothing itself but copies the whole `dist/` of each package out of a sibling
@@ -117,6 +118,7 @@ Routes for a capability are wrapped in a `CapabilityRoute` guard. The MVP surfac
 | Signatures | `SIGNATURES` | `/signatures`, `/signatures/:id` |
 | Phone | `PHONE` | `/phone`, `/phone/:id` |
 | Workflow | `WORKFLOW` | `/workflow`, `/workflow/connections`, `/workflow/:id` |
+| Analytics | `FORMS` + flag | `/analytics` (hidden unless `VITE_ANALYTICS_ENABLED`) |
 | Access | — | `/access` |
 | Account | — | `/account/profile`, `/account/settings` |
 | Support | — | `/support` |
@@ -150,6 +152,10 @@ mid-load.
 
 - **Form designer & runtime** — visual builder (`FormBuilderPage`), preview, fill,
   inbox, instances, responses, embed and send panels, plus an AI assist panel.
+  Form settings carry the **"Developed at Lukeflow"** option (with a live preview of the
+  badge): locked on for free tenants, switchable for paying ones — see
+  [Forms](/capabilities/forms#developed-at-lukeflow-badge). The badge itself
+  (`components/common/LukeflowBadge.tsx`) renders on the public embed and respond bundles.
 - **Email** — template list + visual/AI builder (`EmailTemplateBuilderPage`) and an
   email section, built on react-email components. Once a domain is verified, the Email
   page also registers **email boxes** — inbound (receive, workflow-triggering) or
