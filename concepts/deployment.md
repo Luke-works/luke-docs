@@ -84,6 +84,15 @@ carve-out in both engine layers **and** the auth gateway, because module-script 
 send an `Origin` header even same-origin. The `*.lukeflow.com` wildcard was intentionally
 dropped in favor of these explicit carve-outs. See [Authentication & Authorization](/concepts/auth).
 
+**Filter order matters as much as the policy.** The CORS filter must run *before* anything that
+can reject a request — the security chain (Spring Boot orders it at `-100`) and the rate-limit
+filter — or those rejections leave without `Access-Control-Allow-Origin`. The browser then blocks
+the response, so `fetch()` rejects with a network/CORS `TypeError` instead of resolving with the
+real status. A plain `Filter` bean is registered at `LOWEST_PRECEDENCE`, i.e. *after* the security
+chain, which is the trap: the gateway's 401 for an aged-out access token became an unreadable
+"CORS error", and the UI's refresh-on-401 retry (which must read the 401) never fired. Both
+services now pin the order explicitly and test it.
+
 ## Operations tooling
 
 `luke-platform` also carries the fleet runbooks (DR, rollback, incident triage,
