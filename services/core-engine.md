@@ -42,6 +42,7 @@ Each module owns its own tables (Flyway-managed) and REST surface. Modules are w
 | **access** | `capability/access` | Capability access requests, orchestrated approval, and grants |
 | **secrets** | `capability/secrets` | Encrypted per-tenant secret storage |
 | **capability** | `capability/capability` | Capability catalog / subscription and tier gating |
+| **forms — captcha** | `capability.form` | `TurnstileVerifier` — Cloudflare Turnstile on the PUBLIC embed submit surface. Platform-wide and always on, not a per-form setting. Reports VERIFIED / REJECTED / UNREACHABLE. A rejected or missing token is refused in every profile; an UNREACHABLE Cloudflare fails **open in dev/qa, closed under `prod`**. See [Bot + abuse defences](#bot-abuse-defences-on-the-public-embed-surface) |
 | **forms — consent** | `capability.form` | `ConsentTerms` reads a form's required agreement from the served version's schema (`settings.consent`); `FormSubmissionService.submit` refuses (400) any submission that arrives without it and snapshots the exact wording onto the instance. Fail-closed: a door reporting no consent state, or a form enabled with blank wording, still requires agreement. See [Forms → Consent record](/capabilities/forms#consent-record-the-legally-binding-part) |
 | **branding** | `branding` | Per-tenant commercial plan (`luke_tenant_plan`, FREE\|PAID — absent row = FREE) and `BrandingPolicy`, the single home for the "Developed at Lukeflow" badge rule on public form surfaces. Operator-only `PUT /api/tenants/{id}/plan` is the seam real billing will write to. See [Forms](/capabilities/forms#developed-at-lukeflow-badge) |
 | **minion** | `capability/minion` | Background worker / helper tasks |
@@ -79,6 +80,7 @@ The outbox guarantees the capability's data commit and the "notify the process e
 - **Default-deny `/api` baseline** — a filter authenticates every `/api/**` request against an explicit allow-list (`/api/public/**`, `/api/internal/**`, `GET /api/capabilities`), so a controller added without its own auth is denied by default rather than silently open. Recognizes gateway Bearer / operator Basic / engine Basic. Opt-in (the `prod` profile or `luke.auth.api-default-deny=true`); dev/qa pass through unchanged. Defense-in-depth on top of the per-route filters (gateway/operator/internal/capability).
 - **Admin audit trail** — every privileged admin mutation (user/role/candidate-group/capability changes, org creation, account & tenant deletion) writes a durable, append-only `luke_audit_event` record (actor, action, target, tenant scope, source IP/method/path, correlation id) via `AdminAuditService`. Read with `GET /api/audit` (tenant-scoped — operator or tenant owner) and `GET /api/audit/all` (operator-only, cross-tenant), newest-first and paginated. Fail-soft: a broken store degrades to a `luke.audit` log backstop and never blocks the action it records.
 - **Public embed rate limiting** — the unauthenticated `/api/public/embed/**` render + submit endpoints (and the public minion proxy) are throttled per token and per source IP (429 + `Retry-After`). Per-instance in-memory by default; set `REDIS_URL` to make it a **global cross-replica** limiter (fixed-window Redis `INCR`) so horizontal scale-out can't dilute the cap. Falls back to in-memory if Redis is unset or unreachable — the limiter never blocks boot. The **source IP prefers `X-Real-Client-IP`** — the spoof-resistant value the gateway resolves and stamps (stripping any client-supplied one) — over the forgeable left-most `X-Forwarded-For`, so an abuser can't rotate XFF to mint fresh IP buckets and bypass the per-IP cap. Fully trustworthy once core's public surface is reachable only through the gateway (edge lock-down); until then it is no more forgeable than the XFF it replaces.
+- **Turnstile captcha on the public embed submit** — see [Bot + abuse defences](#bot-abuse-defences-on-the-public-embed-surface) below.
 - **Public-surface gateway-lock** — `PublicGatewayAuthFilter` can pin `/api/public/**`, `/embed*` and `/embed-assets/*` to **gateway-only**. All legitimate public traffic reaches core through the gateway, which stamps a shared secret as `X-Gateway-Auth` (and strips any client-supplied one); when `GATEWAY_VOUCH_SECRET` is set, the filter requires that header on those paths and **404s a direct-to-core hit** — including the raw `*.onrender.com` URL a CDN edge rule can't cover — so the `X-Real-Client-IP` above becomes fully trustworthy. **DEFAULT-OPEN** (the deliberate inverse of the fail-closed `InternalAuthFilter`): an unset secret means pass-through, so dev/qa serve embed with zero config. Arm by setting the secret on the gateway first, then the same value here.
 - **Correlation IDs & health probes** — `CorrelationIdFilter` for request tracing; Spring Boot Actuator liveness/readiness endpoints for Render.
 - **OpenAPI spec** — the custom `/api/**` surface is published as an OpenAPI 3 document at `/v3/api-docs` (springdoc, JSON-only), auto-derived from the controllers incl. required headers (`X-Tenant-Id`/`Authorization`) and the `{error,message,status,correlationId}` error schema, with the gateway-Bearer / operator-Basic / internal-key auth schemes documented.
@@ -152,6 +154,69 @@ Schema: Flyway `V18__access_request_workflow.sql` (`luke_access_request_outbox`,
 | Hosting | Render (Blueprint) |
 
 ## Local development
+
+## Bot + abuse defences on the public embed surface
+
+`/api/public/embed/{token}/submit` is the only endpoint in the system that accepts writes from an
+anonymous browser on somebody else's website. Five layers guard it, applied in this order — the order
+is deliberate, not incidental:
+
+| # | Layer | Why here |
+| --- | --- | --- |
+| 1 | **Per-IP rate limit** | Bounds ALL traffic from one source across every token, before anything else can be amplified. |
+| 2 | **Token resolve** | No work happens for a forged or revoked token. |
+| 3 | **Honeypot** (`Honeypot`) | A hidden field real users never fill. Silently dropped with a fake-success shape so spammers learn nothing — and, being free, it runs before anything that costs money. |
+| 4 | **Turnstile captcha** (`TurnstileVerifier`) | An obvious bot has already been dropped by (3), so it never costs a Cloudflare round-trip; a flood is already bounded by (1), so the captcha cannot be used to amplify our OUTBOUND requests. |
+| 5 | **Per-token rate limit → schema validation → persist** | The existing backstop, unchanged. |
+
+### Turnstile
+
+**Cloudflare Turnstile**, chosen because it is free with unlimited verifications, needs no Cloudflare
+plan or DNS, and is GDPR-friendly. **Platform-wide and always on** — deliberately NOT a per-form
+setting, so there is no schema flag and `luke-forms` is untouched.
+
+Only the anonymous embed surface is challenged. `/api/public/form-instances/{token}/submit` (recipient
+links) is already per-recipient OTP-gated and `/api/form-instances/{id}/submit` is authenticated;
+adding a captcha to either would cost completion rates to re-prove something already proven.
+
+| Config | Default | Notes |
+| --- | --- | --- |
+| `luke.embed.captcha.enabled` | `true` | `false` bypasses the gate entirely. |
+| `luke.embed.captcha.sitekey` | Cloudflare's always-pass **test** sitekey | PUBLIC. Served in the render payload. |
+| `luke.embed.captcha.secret` | Cloudflare's always-pass **test** secret | SECRET. Never appears in any response or log. |
+| `luke.embed.captcha.timeout-ms` | `3000` | So a hung Cloudflare cannot pin request threads. |
+
+The defaults are Cloudflare's published **test** pair, so dev, qa and the whole test suite work with no
+Cloudflare account and no network. The keys must be **paired**: a real secret rejects test tokens and a
+test secret rejects real ones — set BOTH in prod, or the embed surface refuses every genuine
+submission. `TurnstileVerifier` logs an error at startup if it finds a test secret under `prod`.
+
+::: warning Fail-open in dev/qa, fail-closed under `prod`
+`TurnstileVerifier` reports three outcomes, and the difference between the last two is the whole design:
+
+- **VERIFIED** — accepted.
+- **REJECTED** — Cloudflare said no, *or the client sent no token at all*. Refused with a generic 400 in
+  **every** profile. Cloudflare's error codes are logged, never returned: they would tell an abuser
+  which attempt is closest to working.
+- **UNREACHABLE** — timeout, IO error, non-2xx, or a body we cannot parse. We have **no verdict**, which
+  is not the same as a "no". This is the ONLY outcome that bends: allowed outside `prod` (a Cloudflare
+  outage must not break local dev or qa), refused under it (`StrictProfile` — see [Security profiles](#security-profiles)).
+:::
+
+### CSP
+
+The embed page's `Content-Security-Policy` previously carried only `frame-ancestors`, which left script
+and frame sources **unrestricted** — CSP constrains only what you declare, and there is no
+`default-src` to fall back on. It now also declares:
+
+```
+script-src 'self' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com
+```
+
+`'self'` covers the vendored `/embed-assets/embed.js`; the shell has no inline script, so no
+`'unsafe-inline'` is granted (a test asserts both). Styles, fonts and images are deliberately left
+unconstrained — the renderer legitimately loads a tenant-chosen Google font, and a blanket
+`default-src` would break it for no benefit this page needs.
 
 The engine runs against an embedded H2 store by default — no external services required.
 
