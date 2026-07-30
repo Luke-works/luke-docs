@@ -88,6 +88,19 @@ The other package groups still use the manual copy (`index.{js,cjs,d.ts,d.cts}` 
 `styles.css`). Either way, `npm run build` runs `tsc -b` first, so a passing build
 confirms the vendored public types still resolve against the app.
 
+::: warning Renderer adapters must parse the schema once
+`@lukeflow/form-react`'s engine rebuilds whenever the schema **object identity** changes, and it
+reads `initialValues` only at build time. So an adapter that calls `JSON.parse` inline in its render
+body hands the engine a new object on every render — and any re-render of the *host* silently wipes
+the filler's in-progress answers while the inputs keep displaying them, so submitting then fails
+with "field is required". It bit the public embed hardest (finishing an attachment upload, or
+switching to the Attachments tab, re-renders the host) and the same pattern existed in
+[the recipient portal](/apps/portal). Both adapters now `useMemo` the parse on the schema **string**
+— exact, since strings compare by value, and a real schema edit still rebuilds for the builder's
+live preview. To show a different record under the same schema, remount with a `key`; changing
+`initialValues` on a mounted renderer does nothing.
+:::
+
 ### App sections & capabilities
 
 Product areas are gated by tenant [subscription level](/concepts/capabilities).
@@ -125,6 +138,12 @@ alongside the main SPA build.
 Sessions and tenant scoping flow through `AuthContext` (backed by `lib/authApi`),
 part of the platform's headless WorkOS-based auth. See
 [Authentication & Authorization](/concepts/auth).
+
+The access token lives in memory and is renewed lazily: `authed()` refreshes once on a 401 and
+retries. `refresh()` is **single-flight** — WorkOS rotates the refresh token, so simultaneous
+refreshes (pages that load two resources in parallel, e.g. the forms list's live + trashed
+queries) would spend the cookie twice and the loser's 401 would clear it, signing the user out
+mid-load.
 :::
 
 ## Key features
@@ -141,7 +160,36 @@ part of the platform's headless WorkOS-based auth. See
   (post-MVP; hidden behind a flag).
 - **Workflow** — JSON→BPMN builder, runs modal, and Nango-backed connections
   (post-MVP; hidden behind a flag).
-- **Access management** — capability grants, access requests, members, invitations.
+- **Access management** (`/access`) — a grouped console over the three access
+  dimensions plus the people surfaces:
+  - **You** — *Manage My Access*: what you hold, requesting more, your request history, and
+    **Sent back to you** — requests a resource owner returned, with the reason and the two actions
+    the approval process is waiting on (revise & resubmit, or withdraw).
+  - **Requests** — the approval queue for resource owners and org owners. "Deny" is presented as
+    **Send back**, because that is what it now does: the request returns to the requester rather
+    than ending. See the core-engine access-request approval workflow.
+  - **Access model** — *Roles* (core-engine `RoleCatalog`, explained + a member×role
+    matrix), *Attributes* (identity-provider profile fields, read-only) and
+    *Capabilities* (per-capability grant levels, one capability at a time, plus **who approves
+    requests for it** — the resource-owner group the approval task routes to; empty means the
+    org owners).
+  - **Organization** — members, candidate groups, invitations.
+- **LukeExplains** — plain-language access explanations shown wherever access is
+  chosen or decided (request form, approval queue, grant editors). `lib/lukeExplains`
+  derives them from the real backend contract — level semantics from
+  `CapabilityLevel`, and the blocked-action lists from the routes actually annotated
+  `@RequiresCapabilityAction(PUBLISH|DELETE)` — so requester and approver see the same
+  truthful statement of what a grant allows, what it still blocks, and what deserves a
+  second look.
+- **Capability levels** — `read | contributor | read-write`, mirroring core-engine
+  `CapabilityLevel` (#104). Contributor is grantable from the Capabilities section and
+  enforced by the API; the feature screens still gate edit controls on `canWrite`
+  (read-write only), so a contributor currently sees a read-only product UI — the
+  screens must move publish/purge controls onto `canPublish`/`canDelete` first.
+- **Access provenance (forward-compatible)** — `AccessProvenance` on members and
+  grants renders a source badge and locks the control when access is owned by an
+  external identity system. The backend does not stamp a source yet, so nothing is
+  labelled today; the UI lights up when it starts arriving.
 - **Tenant switching** — multi-tenant session switching in the sidebar.
 - **AI assist panels** — per-capability assistants (forms, email, workflow) calling
   the `luke-agents` fleet.

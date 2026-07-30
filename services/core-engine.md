@@ -39,7 +39,7 @@ Each module owns its own tables (Flyway-managed) and REST surface. Modules are w
 | **phone** | `capability/phone` | Vapi.ai inbound/outbound voice-call records and webhooks |
 | **signature** | `capability/signature` | Native PAdES e-sign ceremonies and signed-document state |
 | **document** | `document` | Tenant/capability-gated document registry (S3-backed) |
-| **access** | `capability/access` | Capability access requests and owner approvals |
+| **access** | `capability/access` | Capability access requests, orchestrated approval, and grants |
 | **secrets** | `capability/secrets` | Encrypted per-tenant secret storage |
 | **capability** | `capability/capability` | Capability catalog / subscription and tier gating |
 | **minion** | `capability/minion` | Background worker / helper tasks |
@@ -53,6 +53,7 @@ Capabilities that interact with a BPMN process do **not** call the engine direct
 - `FormSubmissionOutbox` / `FormSubmissionOutboxConsumer` and `FormEventOutbox` — form submissions correlate into a waiting process.
 - `SignatureProcessOutbox` / `SignatureProcessOutboxConsumer` + `SignatureCeremonyWriteBackDelegate` — signing ceremonies feed back into the process.
 - `PhoneCallProcessOutbox` / `PhoneCallProcessOutboxConsumer` + `PhoneCallWriteBackDelegate` — call outcomes feed back.
+- `AccessRequestOutbox` / `AccessRequestOutboxConsumer` — raising an access request starts its approval process (see below).
 - `IntegrationEventOutbox` — workflow integration events.
 
 ::: tip Why an outbox
@@ -83,6 +84,53 @@ The outbox guarantees the capability's data commit and the "notify the process e
 - **Single RBAC role catalog** — role ids, assignability, and dimension mappings live in one `RoleCatalog` the org-admin and permissions views derive from (a drift test pins them); `deployer` is documented internal-only. It also owns the **WorkOS→engine role map** (`RoleCatalog.fromWorkosSlug`): the four assignable slugs mirror the WorkOS control plane 1:1, WorkOS's built-in `member`/`admin` alias to `tenant-user`/`tenant-admin`, and an unknown or internal-only slug is denied. `POST /api/admin/onboard-user` normalizes an incoming (IdP-assigned) role through it before provisioning, so a genuinely-unknown role still fails closed. Role is set at first-touch (provisioning-default) — in-engine assignment overrides later, never re-asserted on login.
 - **Named capability actions** — capability routes are gated by an action-aware level model, not just read/read-write. A route may require a named `CapabilityLevel.Action` (`READ` | `WRITE` | `PUBLISH` | `DELETE`) via `@RequiresCapabilityAction`; the interceptor resolves it from the handler, falling back to the HTTP method (GET/HEAD → READ, else → WRITE), so it only ever tightens a route. `read-write` is grandfathered to permit every action (no behaviour change), and a new **`contributor`** level grants read + ordinary edit but **not** the privileged actions — `publish`/sign-off/seal/retire (PUBLISH) and irreversible `purge` (DELETE) across FORMS/SIGNATURES/EMAIL/WORKFLOW. (#104, AC-1 of the RBAC-depth follow-up to #61.)
 - **Owner implicit capability access** — a tenant **owner** (tenant-admin) implicitly holds `read-write` on every capability the tenant is subscribed to, resolved dynamically at check time (no per-capability grant admin, and it can't drift when subscriptions change). It is a *floor, not a ceiling*: an explicit per-user grant still overrides it. Non-owners are unchanged (explicit grants only). (#104 AC-2 — the tightest "owner-only" auto-access policy.)
+
+### Access-request approval workflow
+
+Raising an access request is orchestrated by BPMN rather than decided by a REST call.
+`AccessRequestApprovalProcess` is deployed per tenant (`AccessRequestProcessDeployer`, plus
+deploy-on-demand at start time so a tenant created after boot isn't stranded):
+
+```
+Access requested → [Approve access request]  (candidateGroups = ${approverGroup})
+                          │
+              approved ───┴─── rejected
+                 │                 │
+        Provision access    Return to requester
+        (grant + APPROVED)         │
+                 │        [Revise or withdraw]  (assignee = ${requesterId})
+                End                │
+                        resubmit ──┴── withdraw
+                            │            │
+                     Reopen request   Close request → End
+                     (back to approval)
+```
+
+- **Resource owners decide.** The approval task routes to `capowner:<tenantId>:<CODE>` —
+  the per-capability resource-owner group (`CapabilityOwnership`, a sibling of `TenantOwnership`
+  and `CandidateGroupOwnership`). A capability with **no** owners falls back to the tenant owner
+  group, so an org that configures nothing behaves exactly as before and a task can never strand.
+  Owners are managed at `GET|PUT|DELETE /api/org/capabilities/{code}/owners[/{userId}]`.
+- **Rejection returns, it doesn't end.** A rejected request becomes `RETURNED` and is assigned
+  back to the requester, who revises the level/justification and resubmits (looping to the same
+  owners, `resubmitCount` incrementing) or withdraws. `DENIED` now only arises on the legacy path.
+- **Provisioning is the one write-back that must fail loudly.** `AccessProvisioningDelegate`
+  grants *before* recording the decision and rethrows on failure — a process reporting "approved"
+  while the member holds nothing would be a silent privilege gap — so a failure leaves a
+  retryable incident with the request still `PENDING`.
+- **Degraded mode is explicit.** Requests raised before this workflow, and requests whose outbox
+  row hasn't drained, have no task; approve/deny then decide them inline exactly as before, and
+  the consumer skips starting a process for a request that is no longer `PENDING`.
+- **Authorization** — `/api/org/access-requests` admits tenant owners/operators (whole queue) and
+  resource owners (only the capabilities they own). A resource owner is authorized on *owning
+  something*, so an empty queue reads as an empty list rather than a 403.
+- **Level-rank duplicate check** — the "you already have this" guard compares
+  `CapabilityLevel.atLeast` (rank), not action classes. The previous comparison rejected every
+  upgrade *through* `contributor` (a `read` holder could not request `contributor`; a
+  `contributor` could not request anything).
+
+Schema: Flyway `V18__access_request_workflow.sql` (`luke_access_request_outbox`, plus
+`process_instance_id` / `resubmit_count` on `luke_capability_access_requests`).
 
 ## Technology
 
