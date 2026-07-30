@@ -152,10 +152,14 @@ mid-load.
 
 - **Form designer & runtime** — visual builder (`FormBuilderPage`), preview, fill,
   inbox, instances, responses, embed and send panels, plus an AI assist panel.
-  Form settings carry the **"Developed at Lukeflow"** option (with a live preview of the
-  badge): locked on for free tenants, switchable for paying ones — see
-  [Forms](/capabilities/forms#developed-at-lukeflow-badge). The badge itself
-  (`components/common/LukeflowBadge.tsx`) renders on the public embed and respond bundles.
+  Form settings open from a **gear icon** beside the form name into a tabbed dialog
+  (`FormSettingsModal`: General · Submission · Legal · Appearance · Activity) — see
+  [Forms](/capabilities/forms#form-settings-dialog). **Legal** configures the consent
+  statement fillers must accept ([consent record](/capabilities/forms#consent-record-the-legally-binding-part));
+  **Appearance** carries the font and the **"Developed at Lukeflow"** option (with a live
+  preview of the badge): locked on for free tenants, switchable for paying ones. The badge
+  (`components/common/LukeflowBadge.tsx`) and the consent gate
+  (`components/formBuilder/FormConsentGate.tsx`) both render on the public embed and respond bundles.
 - **Email** — template list + visual/AI builder (`EmailTemplateBuilderPage`) and an
   email section, built on react-email components. Once a domain is verified, the Email
   page also registers **email boxes** — inbound (receive, workflow-triggering) or
