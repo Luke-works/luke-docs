@@ -42,6 +42,7 @@ Each module owns its own tables (Flyway-managed) and REST surface. Modules are w
 | **access** | `capability/access` | Capability access requests, orchestrated approval, and grants |
 | **secrets** | `capability/secrets` | Encrypted per-tenant secret storage |
 | **capability** | `capability/capability` | Capability catalog / subscription and tier gating |
+| **branding** | `branding` | Per-tenant commercial plan (`luke_tenant_plan`, FREE\|PAID — absent row = FREE) and `BrandingPolicy`, the single home for the "Developed at Lukeflow" badge rule on public form surfaces. Operator-only `PUT /api/tenants/{id}/plan` is the seam real billing will write to. See [Forms](/capabilities/forms#developed-at-lukeflow-badge) |
 | **minion** | `capability/minion` | Background worker / helper tasks |
 | **config** | `capability/config` | Capability-level configuration |
 | **workflow** | `workflow` | WORKFLOW capability tables and integration event rail (hidden behind a launch flag) |

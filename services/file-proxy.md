@@ -47,7 +47,7 @@ only small JSON handshakes.
 | **Document broker (public)** | `/api/public/documents` | Embed token only (never a client-supplied tenant) | Attachment upload from embedded forms with no login; a `/link` call binds uploads to the created process instance on submit. |
 | **Email-asset upload (authed)** | `/api/email-assets` | Gateway identity headers | Browser-facing upload of email images/assets to S3 (5 MiB cap — "keep emails light"). |
 | **Email-asset serve (public)** | `/api/public/email-assets/{assetId}` | High-entropy asset UUID only | Durable, unauthenticated, aggressively-cacheable URL a recipient's mail client loads via `<img src>`; core resolves `READY` assets to a tenant + storage key. |
-| **Form-PDF render (internal)** | `/internal/render/form-pdf` | Fail-closed internal shared secret (`X-Internal-Key`) | core-engine → proxy: render a submission to PDF via headless Chromium, store it, and report size + SHA-256 so core can finalize. Not routed by the gateway. |
+| **Form-PDF render (internal)** | `/internal/render/form-pdf` | Fail-closed internal shared secret (`X-Internal-Key`) | core-engine → proxy: render a submission to PDF via headless Chromium, store it, and report size + SHA-256 so core can finalize. Not routed by the gateway. The request carries `{tenantId, storageKey, schema, data, theme, provenance}`; `provenance` is the optional submission-record block (submitted-at / IP / device / via) the harness prints under the form — see [Forms → Submission provenance](/capabilities/forms#submission-provenance-what-makes-a-submission-enforceable). |
 | **Health** | `/health`, Actuator `health,info` | — | Liveness for Render. |
 
 ### The BlobStore abstraction

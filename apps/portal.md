@@ -91,7 +91,14 @@ public interface RecipientItemProvider {
 ```
 
 `PortalService.listItems` aggregates across all providers. **Forms is the first provider**
-(`FormRecipientItemProvider` → open `FormInstance`s become `"form"` items). To add a capability:
+(`FormRecipientItemProvider` → open `FormInstance`s become `"form"` items).
+
+An open form item renders the **"Developed at Lukeflow"** badge under the form when the fill payload
+says to (`showBranding`, resolved server-side against the tenant's plan) — the portal is a public form
+surface like `/respond/{token}`, so a recipient sees the same attribution either way. See
+[Forms](/capabilities/forms#developed-at-lukeflow-badge).
+
+To add a capability:
 
 1. Implement `RecipientItemProvider` in that capability's package (backend).
 2. Ensure its public action surface accepts the portal session (like
