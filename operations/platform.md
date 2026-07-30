@@ -45,6 +45,34 @@ shared-database rule. In short:
    and push the engine — a consumer-ui push alone does not update it.
 :::
 
+### Externally-issued secrets
+
+Most secrets in the blueprints are `generateValue: true` — Render mints a real, stable, per-service
+value and nothing has to be typed anywhere. That only works for secrets **we** define. Anything issued
+by a third party is `sync: false` instead: declared in the blueprint so the variable exists and is
+reviewable, with the value pasted into the Render dashboard so it never reaches git. Postmark's tokens
+work this way, and so does **Cloudflare Turnstile**:
+
+| Key | dev / qa | prod |
+| --- | --- | --- |
+| `LUKE_EMBED_CAPTCHA_SITEKEY` | optional | **required** |
+| `LUKE_EMBED_CAPTCHA_SECRET` | optional | **required** |
+
+Unset, core-engine falls back to Cloudflare's published always-pass **test** pair, so dev and qa work
+with no Cloudflare account. Prod is different for two reasons: it runs `postgres,prod`, where an
+unreachable Cloudflare fails **closed**; and the keys are **paired** — a test secret rejects real
+tokens exactly as a real secret rejects test ones, so setting one without the other refuses every
+genuine embed submission. Set both or neither.
+
+::: warning Not an environment variable
+The Turnstile widget also has a **hostname allowlist** in the Cloudflare dashboard, and Turnstile
+validates against it. It must include whatever host serves `/embed/{token}` — the engine's domain.
+Miss it and every key is correct, the blueprint is correct, and every submission still fails.
+:::
+
+See [core-engine → Bot + abuse defences](/services/core-engine#bot-abuse-defences-on-the-public-embed-surface)
+for what the captcha actually enforces.
+
 ## Runbooks
 
 The README and docs carry the operational runbooks: disaster recovery, rollback, incident
