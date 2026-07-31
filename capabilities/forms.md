@@ -337,35 +337,73 @@ CSP `frame-ancestors`. The list annotates each origin with `allowed` so an autho
 policy is blocking — but it must never become the gate.
 :::
 
-## Data view (outbound only)
+## Who fills each field (outbound)
 
-The builder's `Design ⇄ Data` toggle is **hidden entirely on INBOUND forms**. An inbound form has one
-filler, so there is nothing to divide the data between and the contract tells the author nothing they
-can act on.
-
-On an OUTBOUND form the view earns its place: the form is filled by two people, so every data
-variable belongs to one of them. A **`+`** beside each variable asks *"Who provides it?"* with two
-answers:
+An outbound form is completed by two people, so every data variable belongs to one of them. The
+**Who fills** dialog is the single place that decision is made:
 
 | Answer | Stored role | Meaning |
 | --- | --- | --- |
-| I pre-fill it | `PREPARER` | You answer it when you send the form; the recipient can't change it |
-| ↳ *Recipient may change it* | `EITHER` | A **qualifier**, not a third answer — you pre-fill it and they may correct it |
-| The recipient fills it | `RECIPIENT` | They see an empty field to complete |
+| Recipient fills | `RECIPIENT` | They see an empty field to complete |
+| You fill | `PREPARER` | You answer it when sending; the recipient can't change it |
+| You fill, they can edit | `EITHER` | You seed it and they may still correct it |
 
-`EITHER` is nested under the first option rather than offered as a third choice because it is a
-refinement of pre-filling, not a separate decision — and nesting it means **no existing outbound form
-changes behaviour**. The field list groups by the answer, and a card lists what the engine always
-records ([submission provenance](#submission-provenance), consent, attachment audit) so the contract
-shown is the *whole* contract, not just the fields the author drew.
+The map is keyed by FIELD KEY and stored on the definition, so changing it takes effect for the next
+send without cutting a new version.
 
-Roles are seeded from the **effective** roles, never the raw stored map: a form authored before roles
-existed has no entries, and persisting one key alone would freeze the rest at whatever they happened
-to derive to. The picker and the older **"Who fills"** panel write the same `outboundRoles` map.
+### Enforced, not merely rendered
 
-The library side is generic — see [`dataAnnotations`](/libraries/forms#key-features). form-builder
-knows only that there are named options, that one may carry a qualifier, and how to bucket rows by
-the answer; the role ids and where they persist stay in Lukeflow.
+`PublicFormInstanceService.recipientWritable` strips every `PREPARER` field from a recipient's
+save/submit **server-side**. Without it, anyone holding a valid recipient link could POST a new value
+for a preparer-owned field and silently rewrite the terms of what they were sent — the endpoint is
+reachable without a browser.
+
+Rejected keys are dropped **silently** rather than 400'd: a legitimate client never sends them (they
+are disabled in its DOM), so a request carrying them is either tampering or a stale tab, and neither
+deserves a descriptive error.
+
+`EITHER` stays recipient-writable — the preparer may seed it, the recipient may still change it. And
+a form authored before roles existed keeps working: a field marked `disabled` in the schema is
+treated as preparer-owned, which is how preparer fields were always expressed.
+
+::: warning The map can outlive the fields it names
+Roles live on the DEFINITION while schemas are versioned, so an entry can name a field that no longer
+exists. Everything derives the field list from the schema and treats the map as advisory — a stale
+entry is ignored rather than breaking a send. It is therefore not a historical record of what a given
+instance was sent under.
+:::
+
+### Generate template
+
+The same dialog generates the spreadsheet a preparer fills for a campaign, because the template's
+contents depend on exactly these decisions. It carries:
+
+- **the recipient** — `recipient.firstName`, `recipient.lastName`, `recipient.email`,
+  `recipient.phone`. A prefill row is useless without one: the form data says *what* to send, never
+  to whom;
+- **only the fields the preparer owns** — `PREPARER` and `EITHER`. A column for a recipient-owned
+  field reads as an instruction to answer on their behalf, and the engine strips exactly those
+  values on submit, so the column would be a lie.
+
+Backed by the pure `buildFormTemplate(schema, registry, { includeKeys, metaColumns })` in form-core.
+An **empty** `includeKeys` yields no field columns rather than all of them — the opposite default
+would quietly hand the preparer every recipient-owned field.
+
+::: warning Email or phone is documented, not enforced
+Email and phone are an "at least one of these" pair, stated in the generated file itself. There is
+no CSV import to validate it against.
+
+Separately, `POST /send` still **requires** `recipient.email` and delivery is email-only — there is
+no SMS path. A phone-only row therefore cannot be sent today; the column exists because the
+recipient record wants it.
+:::
+
+::: info There is no Data view
+The builder's `Design ⇄ Data` toggle is hidden on every Lukeflow form (`hideDataView`). An inbound
+form has one filler, so there is nothing to divide the data between; for outbound, the same
+decisions — and the template that depends on them — live in Who fills. Two places to answer one
+question is one too many.
+:::
 
 ## Builder status icon
 
