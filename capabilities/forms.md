@@ -60,7 +60,7 @@ All tables live in the core engine's capability schema (`com.luke.engine.capabil
 
 | Entity (table) | Key fields | Purpose |
 | --- | --- | --- |
-| `FormDefinition` (`luke_form_definitions`) | `id`, `@Version version`, `code` (FM-XXXX-DDMMMYY, unique per tenant), `name`, `kind` (INBOUND/OUTBOUND), `submissionHandling`, `outboundRolesJson`, `status` (DRAFT/PUBLISHED/RETIRED), `publishedVersion`, `draftSchema`, `allowedEmbedOrigins`, `embedKeyVersion`, `showBranding`, `embedVersionMode`/`embedVersion`, `lockedBy`/`lockedAt`, `deletedAt`, `lastTestedAt` | The versioned, tenant-scoped form template. Editable working draft in `draftSchema`; `publishedVersion` is what consumers resolve. JPA `@Version` gives optimistic locking (concurrent draft saves → 409). |
+| `FormDefinition` (`luke_form_definitions`) | `id`, `@Version version`, `code` (FM-XXXX-DDMMMYY, unique per tenant), `name`, `kind` (INBOUND/OUTBOUND), `submissionHandling`, `outboundRolesJson`, `status` (DRAFT/PUBLISHED/RETIRED), `publishedVersion`, `draftSchema`, `allowedEmbedOrigins`, `embedOriginNames`, `embedKeyVersion`, `showBranding`, `embedVersionMode`/`embedVersion`, `lockedBy`/`lockedAt`, `deletedAt`, `lastTestedAt` | The versioned, tenant-scoped form template. Editable working draft in `draftSchema`; `publishedVersion` is what consumers resolve. JPA `@Version` gives optimistic locking (concurrent draft saves → 409). |
 | `FormVersion` (`luke_form_versions`) | `id`, `formId`, `version` (unique per form), `schema` (immutable), `checkedInBy`/`checkedInAt`, `signedOffAt`/`signedOffBy` | An immutable checked-in snapshot — the artifact a renderer/process resolves and never changes underneath them. Publish is gated on `signedOffAt` being set. |
 | `FormInstance` (`luke_form_instances`) | `id`, `token` (unique, opaque URL handle), `definitionCode` + `version` (pinned), `state`, `prefill`/`data`/`recipient`/`context` (JSON maps), `recipientEmail`/`recipientPhone` (denormalised + indexed, kept in sync by `setRecipient`), `expiresAt`, `submittedAt`, `submittedIp`/`submittedUserAgent`/`submittedVia`, `consentText`/`consentAgreedAt` | A concrete runtime occurrence: hosted submission, prefilled invitation, or task-bound fill. `context` links back to `processInstanceId`/`taskId`/`businessKey`. The denormalised `recipientEmail` powers the portal's "forms assigned to me" query. |
 | `FormSubmissionOutbox` (`luke_form_submission_outbox`) | `id`, `businessKey` (= instance id, unique/idempotent), `formInstanceId`, `processBusinessKey` (SM-…), `formDataJson`, `formMetaJson`, `status` (QUEUED/PUBLISHED/FAILED), `processInstanceId`, `retryCount` | Transactional outbox for submit → Camunda process start. Written in the same tx as the SUBMITTED state; drained off-thread. |
@@ -306,12 +306,60 @@ Three deliberate limits, because the recorder runs on a public, unauthenticated 
 - **Sampled** — an already-seen origin is only re-written once its `lastSeenAt` is older than
   `luke.embed.sites.throttle-minutes` (5), so `renderCount` is "roughly how busy", not an analytics figure.
 
+### The embed dialog
+
+`FormEmbedPanel` is a fixed-height dialog with three tabs, rather than the single long scroll it
+began as — its sections answer unrelated questions, and the allowlist (the part authors come back to
+change) had ended up below three screens of content.
+
+| Tab | Contents |
+| --- | --- |
+| **Snippet** | The copy-paste snippet, Open preview, Regenerate link |
+| **Version** | Which version visitors are served (AUTO vs PINNED) |
+| **Websites** | The allowed-websites editor, plus the observed "Seen embedding this form" list |
+
+**Allowed websites** are edited as **Name + Website rows** with *Add another*. The name is stored in
+`embedOriginNames`, a JSON map keyed by canonical origin and deliberately held in its own column —
+`allowedEmbedOrigins` is the CSP input, so its format is a security surface, while a label is
+decoration. A label is only kept for an origin that is actually on the allowlist, so removing a site
+drops its name with it.
+
+A malformed origin blocks the save with the offending row marked, rather than being filtered out:
+dropping it would narrow the allowlist to whatever happened to parse, so a typo would look saved
+while the site it was meant to permit stayed blocked. The engine independently fails the same case
+closed with a 400.
+
 ::: warning Observation, not permission
 A host page can suppress the header (`Referrer-Policy: no-referrer`) and never appear in this list, and
 the header is client-supplied so a caller could name an origin that isn't really embedding the form.
 The authoritative "who may frame this form" remains `allowedEmbedOrigins`, enforced by the browser as
 CSP `frame-ancestors`. The list annotates each origin with `allowed` so an author can spot a site the
 policy is blocking — but it must never become the gate.
+:::
+
+## Builder status icon
+
+Next to the gear sits a **status icon** (`FormStatusPopover`) carrying everything about the form's
+*state*. It replaced a row of chips — status · version · signed-off · save state — plus a full-width
+view-only banner, which stated the same few facts in four places and pushed the canvas down the page.
+
+The glyph and colour still answer the question without a click:
+
+| Icon | Meaning |
+| --- | --- |
+| Grey padlock | **View only** — you have edit rights but haven't checked the form out |
+| Green filled circle | **Published vN** — a version is live on the public surfaces |
+| Amber dashed circle | **Not published** — nothing is live yet |
+
+Opening it gives the detail (version being edited vs live, sign-off date, autosave state) and, when
+view-only, the **Checkout** button — "read-only" and "how do I edit this" are the same question, and
+they used to sit at opposite ends of the page.
+
+::: warning One banner deliberately stays inline
+The **"this form is being edited by …"** warning is NOT folded into the icon. It is time-critical and
+destructive if missed — your changes may overwrite a colleague's — and a conflict warning nobody
+opened is a conflict warning that did not work. Ambient status can live behind a click; a warning
+about losing someone else's work cannot.
 :::
 
 ## Form settings dialog
