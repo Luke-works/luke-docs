@@ -179,6 +179,11 @@ Only the anonymous embed surface is challenged. `/api/public/form-instances/{tok
 links) is already per-recipient OTP-gated and `/api/form-instances/{id}/submit` is authenticated;
 adding a captcha to either would cost completion rates to re-prove something already proven.
 
+The widget renders through the form renderer's [`beforeSubmit` slot](/libraries/forms#key-features),
+so it sits **immediately above the Submit button** — with `appearance: "interaction-only"` most fillers
+never see it, and the ones who do meet it where they are already looking instead of at the top of a
+page they have scrolled past.
+
 | Config | Default | Notes |
 | --- | --- | --- |
 | `luke.embed.captcha.enabled` | `true` | `false` bypasses the gate entirely. |
