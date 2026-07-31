@@ -52,6 +52,8 @@ The packages are published to a private registry via changesets, but in practice
 - **Author-owned submit button** — a schema containing a `button` that submits (a "Submit Order", say) makes the renderer stand its own button down, rather than drawing a second one underneath doing the same thing. Detected by the pure `submitButtonId(schema)` in form-core, which mirrors the renderer's rule exactly and walks only what is reachable from `root` (an orphaned button entity renders nothing, so it must not count). An explicit `submitLabel` still overrides the inference.
 - **Data Structure view controls** — `hideDataView` removes the builder's Design/Data toggle entirely for forms whose data contract tells the author nothing actionable (Lukeflow hides it on every form), and falls back to the canvas if a host hides it while the view is open. `buildFormTemplate` takes `includeKeys` (scope the columns to one filler's fields) and `metaColumns` (fixed columns prepended, e.g. who the row is being sent to) — see [Who fills](/capabilities/forms#generate-template).
 - **Submission gate slot** (`beforeSubmit`) — host content rendered *inside* the form, immediately above the Submit button, for anything a filler must clear before submitting (a consent tick, a captcha, terms). It appears only where the Submit button itself does: never under `readOnly` or `submitLabel: null`, and in a wizard only on the **last** step — a gate above a "Next" button would be misleading. Used by the public embed to place its [Turnstile challenge](/services/core-engine#turnstile) where the filler is already looking rather than at the top of a long page. The slot follows whichever button actually submits — including an author's own, wherever it sits in the tree — and is suppressed when the engine has conditionally hidden it, since a gate above a button that isn't there implies a submit the filler cannot reach.
+- **Per-field validation timing** (`validateOn`) — a field can reveal its error on first **blur** or first **change** instead of waiting for a submit attempt. Revealing validates that one key only, so a field the filler hasn't reached yet never lights up early. Left unset (the default) a form stays submit-only. It is hidden in the builder for grid cells, which surface errors at grid level rather than inline.
+- **The settings panel offers only settings that do something.** Editors are gated by what the renderer can actually honour for that node: `labelPosition` is hidden for radio/checkboxes (a `<legend>` is laid out by the UA inside the fieldset border and can't move into a grid column), and the six shell-only settings — `description`, `tooltip`, `labelPosition`, `hideLabel`, `customClass`, `validateOn` — are hidden for a **grid cell**, which renders as a bare control in a `<td>` with no label element, class hook, or inline error. A grid cell's `label` still becomes its column header.
 - **`content-visibility`-based virtualization** (`virtualize`) for long forms — off-screen rows skip layout and paint but stay in the DOM, so focus-on-error, tab order, browser Find, and validation all keep working (unlike JS windowing).
 
 ## Security & accessibility
@@ -87,7 +89,7 @@ The renderer needs no `unsafe-inline` / `unsafe-eval` for its own code. QuickJS 
 | UI framework | React 19 (peer `react >=18`, externalized) |
 | Bundler | `tsup` (ESM + CJS + `.d.ts` per package) |
 | Unit tests | Vitest (+ `fast-check` property/fuzz), jsdom |
-| E2E | Playwright across Chromium / Firefox / WebKit |
+| E2E | Playwright across Chromium / Firefox / WebKit (incl. a **layout-geometry suite** — jsdom has no layout engine, so box overflow, stretch, and grid placement are only assertable in a real browser) |
 | A11y testing | `@axe-core/playwright` |
 | HTML sanitizer | DOMPurify 3.4 (SSR-aware) |
 | JS sandbox | QuickJS via `quickjs-emscripten` (optional peer) |
@@ -108,7 +110,7 @@ npm run typecheck     # tsc --noEmit across the workspace
 npm run api           # public-API surface guard (enforced in CI)
 npm run size          # per-bundle size-budget check
 npm test              # ~570 Vitest tests across 36 files
-npm run e2e           # 15 Playwright specs (incl. axe-core a11y)
+npm run e2e           # 16 Playwright specs (incl. axe-core a11y + field layout)
 
 npm run bench         # engine perf benchmark (see docs/BENCHMARKS.md)
 ```
