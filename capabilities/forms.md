@@ -337,6 +337,36 @@ CSP `frame-ancestors`. The list annotates each origin with `allowed` so an autho
 policy is blocking — but it must never become the gate.
 :::
 
+## Data view (outbound only)
+
+The builder's `Design ⇄ Data` toggle is **hidden entirely on INBOUND forms**. An inbound form has one
+filler, so there is nothing to divide the data between and the contract tells the author nothing they
+can act on.
+
+On an OUTBOUND form the view earns its place: the form is filled by two people, so every data
+variable belongs to one of them. A **`+`** beside each variable asks *"Who provides it?"* with two
+answers:
+
+| Answer | Stored role | Meaning |
+| --- | --- | --- |
+| I pre-fill it | `PREPARER` | You answer it when you send the form; the recipient can't change it |
+| ↳ *Recipient may change it* | `EITHER` | A **qualifier**, not a third answer — you pre-fill it and they may correct it |
+| The recipient fills it | `RECIPIENT` | They see an empty field to complete |
+
+`EITHER` is nested under the first option rather than offered as a third choice because it is a
+refinement of pre-filling, not a separate decision — and nesting it means **no existing outbound form
+changes behaviour**. The field list groups by the answer, and a card lists what the engine always
+records ([submission provenance](#submission-provenance), consent, attachment audit) so the contract
+shown is the *whole* contract, not just the fields the author drew.
+
+Roles are seeded from the **effective** roles, never the raw stored map: a form authored before roles
+existed has no entries, and persisting one key alone would freeze the rest at whatever they happened
+to derive to. The picker and the older **"Who fills"** panel write the same `outboundRoles` map.
+
+The library side is generic — see [`dataAnnotations`](/libraries/forms#key-features). form-builder
+knows only that there are named options, that one may carry a qualifier, and how to bucket rows by
+the answer; the role ids and where they persist stay in Lukeflow.
+
 ## Builder status icon
 
 Next to the gear sits a **status icon** (`FormStatusPopover`) carrying everything about the form's
@@ -370,7 +400,7 @@ builder toolbar, split into five tabs (`FormSettingsModal`):
 | Tab | Contents | Save model |
 | --- | --- | --- |
 | **General** | Name, description, form ID, created/last-edited by | Metadata — **Save** button |
-| **Submission** | Submission message, file attachments, "save submission as Attachment" (PDF) | Versioned schema — autosaves |
+| **Submission** | Submission message, file attachments (**paid** — see [File attachments](#file-attachments-paid)), "save submission as Attachment" (PDF) | Versioned schema — autosaves |
 | **Legal** | Require an agreement + its wording, plus what is always recorded | Versioned schema — autosaves |
 | **Appearance** | Form font (with preview), "Developed at Lukeflow" badge | Font: versioned schema · badge: metadata |
 | **Activity** | The form's audit feed (`FormAuditEvent`) | Read-only |
@@ -423,6 +453,33 @@ work our customers publish, so the rule is deliberately asymmetric:
   downgrade never rewrites the author's stored preference: the badge reappears while they are free and
   their original choice returns if they upgrade again.
 - **Fail-safe.** An unreachable plan table keeps the badge visible rather than failing the render.
+
+## File attachments (paid)
+
+Attachments are the expensive part of a form — object storage we hold, retain and serve on the
+tenant's behalf — so they are a **paid feature**. A free tenant collecting uploads is an unbounded
+cost with no revenue against it.
+
+`com.luke.engine.branding.PlanFeatures` owns the rule, sitting beside `BrandingPolicy` (which owns
+the badge, the rule that came first) so a second gated feature does not end up inside a class named
+after branding. Every method **fails closed**: a blank tenant or an unreachable plan table means
+*free*, because handing out a paid feature on a billing blip is the expensive mistake while briefly
+refusing one is visible and recoverable.
+
+Enforced in two places, **only one of which is the boundary**:
+
+| Where | What | Is it the gate? |
+| --- | --- | --- |
+| `EmbedDocumentService.authorize` | **402 Payment Required** | **Yes.** The endpoint is reachable by anyone holding the embed token, so the browser cannot be trusted with it. Refused *before* the rate-limit window and attachment count are touched, so blocked uploads can't burn a shared token's budget. |
+| `GET /api/public/embed/{token}` | Effective `attachmentsEnabled` (schema setting **and** plan) | No — a courtesy. It spares a filler an upload that was never going to be accepted, and stops a free tenant re-opening the tab by editing the payload. |
+
+Reads carry a transient `attachmentsLocked` beside `brandingLocked` so the builder renders the option
+locked with a "Paid plan" chip. Both default to **locked**, so a response that skips the enrichment
+fails closed rather than offering a feature the server then refuses.
+
+`FormSettingsRead` is the one server-side reader of the versioned schema's `settings.*`, keeping
+"did the author ask for it" and "are they entitled to it" as two separate questions rather than one
+flag that means neither.
 
 ## Endpoints
 
