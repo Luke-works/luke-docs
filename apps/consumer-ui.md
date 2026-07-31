@@ -112,7 +112,7 @@ Routes for a capability are wrapped in a `CapabilityRoute` guard. The MVP surfac
 | Section | Capability | Representative routes |
 | --- | --- | --- |
 | Dashboard | — | `/dashboard` |
-| Forms | `FORMS` | `/forms`, `/forms/:id`, `/forms/inbox`, `/forms/instances`, `/forms/:code/fill`, `/forms/:code/responses` |
+| Forms | `FORMS` | `/forms`, `/forms/:id`, `/forms/inbox` (the unified **Inbox** — form *and* email tasks), `/forms/instances`, `/forms/:code/fill`, `/forms/:code/responses` |
 | Email | `EMAIL` | `/email` |
 | Email Templates | `EMAIL` | `/email-templates`, `/email-templates/:id` |
 | Signatures | `SIGNATURES` | `/signatures`, `/signatures/:id` |
@@ -163,7 +163,24 @@ mid-load.
 - **Email** — template list + visual/AI builder (`EmailTemplateBuilderPage`) and an
   email section, built on react-email components. Once a domain is verified, the Email
   page also registers **email boxes** — inbound (receive, workflow-triggering) or
-  outbound (send, dedicated Postmark stream) addresses on the sender domain.
+  outbound (send, dedicated Postmark stream) addresses on the sender domain — and, beneath
+  them, **routing rules** (`components/email/EmailRoutingRules.tsx`) deciding what arriving
+  mail becomes: who reviews it, at what priority, or that it makes no task at all. The list
+  states that rules run top-down and the **first match wins**, because a user who assumes
+  actions accumulate will write two rules that quietly contradict each other.
+- **Inbox** — one work queue for the tenant, at `/forms/inbox` (the route is unchanged; the
+  nav entry and heading are now **"Inbox"**, since a reviewer would never look under a forms
+  label for the email they were told to triage). Rows render by the task's `kind`: a form task
+  shows its submission, an email task shows the received message
+  (`components/email/EmailMessageView.tsx`). The split view lists **inbound boxes as sources
+  alongside forms**, email first. See [Email intake](/services/core-engine#email-intake-inbound-mail-becomes-work).
+
+  ::: warning The email body is rendered as text, never as HTML
+  It is markup written by an unauthenticated stranger. Injecting it — even sanitised — puts
+  remote images (tracking pixels confirming a human read the mail), arbitrary CSS, and one
+  sanitiser bug next to an authenticated session. HTML-only mail falls back to text recovered
+  from the markup, so suppressing it costs nothing a reviewer needs.
+  :::
 - **Signatures** — signature template builder, list, and the public signing page
   (post-MVP; hidden behind a flag).
 - **Phone** — call list and detail views for the Vapi-backed voice capability
