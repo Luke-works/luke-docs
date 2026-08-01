@@ -268,6 +268,53 @@ Playwright specs (`screens`, `flows`, `smoke`, `forms-builder-overflow`). The
 (phone 390px, tablet 768px, laptop 1280px, desktop 1536px), asserting each screen
 renders without crashing or horizontal overflow.
 
+### Visual regression: what the pixel suites will and won't catch
+
+`visual.spec.ts` (every route) and `visual-states.spec.ts` (modals, drawers, error states)
+compare Linux screenshots against committed baselines. They run on the parity branches
+(`develop`/`qa`/`prod`) and via the manual workflow — **not** on feature PRs, so a legitimate
+redesign doesn't have to fight the gate before review.
+
+Both share one comparison policy (`e2e/support/visual.ts`):
+
+| Setting | Value | Why |
+|---|---|---|
+| `threshold` | `0.2` | per-pixel colour distance — the actual antialiasing allowance |
+| `maxDiffPixels` | `20` | **absolute**, so a laptop shot is no more forgiving than a phone one |
+
+::: danger Why the budget is absolute, not a ratio
+It used to be `maxDiffPixelRatio: 0.01`, which was wrong twice over. A ratio is not an
+antialiasing control — AA noise is *many pixels differing slightly*, which is exactly what
+`threshold` handles; a ratio instead licenses some share of pixels to differ by **any** amount.
+And it scales with image size: 1% is ~3.3k pixels on a 390×844 phone but ~10.2k on a 1280×800
+laptop, so the identical text edit tripped on phone and passed on laptop.
+
+That was not theoretical. Renaming the inbox heading (2026-07-31) updated the phone baselines and
+left the laptop ones committed with the OLD wording, still green — passing *by tolerance, not by
+matching*. When the budget was later pinned to 0 to measure, **38 of 200 baselines** turned out to
+have silently drifted by 25–2443 pixels each, accumulated across many PRs.
+
+The floor was then measured rather than guessed: with every baseline freshly shot, **202/202
+compared exactly equal**. The runner is deterministic, so `20` is pure headroom. If this starts
+flaking, find the nondeterminism (an unhidden caret, a live timestamp) — don't raise the number.
+:::
+
+**Regenerating or checking baselines** — Actions → E2E → Run workflow, with `mode`:
+
+- `update` — reshoot and upload a `visual-baselines` artifact to download and commit. A human
+  still approves every pixel; a job that pushed baselines itself would auto-approve regressions.
+- `verify` — compare against the committed images and fail on drift, uploading the
+  expected/actual/diff report. This is how a tolerance change (or a stale baseline) can be
+  evaluated *before* it reaches a parity branch.
+
+::: tip The sidebar is collapsed in almost every shot
+`SidebarContext` defaults to collapsed, so the nav renders as icons and no baseline held a
+navigation **label** — renaming a nav item was pixel-free on desktop. The `desktop-nav-expanded`
+state exists to cover exactly that. Note its assertion uses `toBeInViewport()`, not
+`toBeVisible()`: sub-menus are an `overflow-hidden` container animated to `height: 0`, and
+`toBeVisible()` is not clipping-aware — a clipped link still reports a 24×40 box and passes.
+:::
+
 ::: warning CI is gating
 CI (`ci.yml`) runs on Node 22: `vendor:check`, then type-check + build, then unit
 tests, then `eslint . --max-warnings 0`. Any error *or* warning fails the build.
