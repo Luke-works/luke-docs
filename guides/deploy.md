@@ -102,13 +102,34 @@ The public **`/embed`** page is a **standalone bundle copied into the engine** a
 `static/embed-assets`. It is **not** served by `luke-consumer-ui`. **A consumer-ui push does
 not update it.**
 
-To ship an `/embed` change:
+The **`/respond`** bundle (`static/respond-assets`) works exactly the same way.
 
-1. **Build the embed bundle** (`build:embed`).
-2. **Copy it into the engine** at `static/embed-assets`.
-3. **Commit and push the engine** (`luke-core-engine`) to `develop`.
+To ship an `/embed` or `/respond` change — including any change to a `@lukeflow/form-*`
+package vendored into them:
+
+```bash
+# in luke-consumer-ui
+npm run vendor:embed && npm run vendor:respond   # builds + copies into ../luke-core-engine
+npm run bundles:lock                             # record the new hashes
+# then commit + push BOTH repos — the engine push is what actually deploys
+```
 
 If you only push consumer-ui, the live `/embed` page stays on the old bundle.
+:::
+
+::: warning This drifted silently for five days — there is now a guard
+On 2026-08-01 both committed bundles turned out to be five days and several features behind
+source. The embed was serving a form with **none** of the forms layout fixes — and because those
+bugs only appear where the host page ships no CSS reset, the third-party embed was simultaneously
+the only place they mattered and the only place still broken.
+
+`npm run bundles:check` now runs in consumer-ui CI and fails the moment the built output stops
+matching `public-bundles.lock.json`, i.e. exactly when a re-vendor becomes necessary.
+
+The bundles also read **no** `.env`: their `envDir` points at an empty committed folder. A build
+on a laptop carrying `VITE_ANALYTICS_ENABLED=true` had compiled that personal flag into the public
+artefact — six bytes' difference from a clean build, caught by the guard's first run. Anything the
+bundles genuinely need is set explicitly via `define:` in the vite configs.
 :::
 
 ## Shared database rule
