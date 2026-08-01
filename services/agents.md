@@ -42,6 +42,49 @@ consumer-ui / core-engine
 | `sentiment` (LukeSense) | LukeSense Sentiment Analyzer | 0.1.0 | `POST /analyze`, `POST /batch`, `POST /intake` | sentiment / urgency / theme classification of short business text |
 | `workflow` | LukeFlow Workflow Builder | 0.1.0 | `POST /chat` | valid, wireable `WorkflowDoc` |
 
+### LukeBuilds renders schemas the product will actually accept
+
+The form agent does **not** let the LLM write a builder schema. The model emits a flat field list
+(`FormSpec`); deterministic Python renders that into the coltorapps schema. That split is what
+makes the output testable without an LLM at all — and it needed testing.
+
+Probing 50 form combinations on 2026-08-01 and validating each with **form-core's real
+`validateSchema`** found **seven** that rendered schemas the product rejects as *errors*. Errors
+block check-in and publish, so LukeBuilds could produce a form its author was then unable to ship.
+All seven were data keys the model chose:
+
+| Model writes | Rejected as |
+|---|---|
+| `Full Name`, `e-mail`, `a.b` | `invalid-key` — not an identifier |
+| `naïve`, `姓名` | `invalid-key` — not ASCII |
+| `123` | `invalid-key` — leading digit |
+| `""` | fell back to the entity UUID, itself invalid |
+| two fields sharing a key | `duplicate-key` — their answers would collide |
+| a field named like a container's nested **child** | `duplicate-key` |
+
+The prompt *asks* for snake_case, which is not the same as holding the model to it — and the last
+case it cannot avoid unaided, since it never sees a container's children yet shares their
+submission namespace.
+
+`spec_to_schema` now normalises every key at the single point where schemas are produced. Accents
+decompose rather than vanish (`naïve` → `naive`), an unusable key falls back to the **label**
+before an anonymous name (`123` on "Age" → `age`), duplicates are suffixed with the first field
+keeping the plain key, a preserved entity always wins the key it already owns (renaming it would
+silently move existing data), and a valid author-chosen key is untouched (`firstName` survives).
+
+::: tip The contract is enforced in BOTH languages
+`tests/form_matrix.py` builds the combination matrix — every field type (read off `FieldType`, so
+a new type enrols itself), every logic action, choice/label/key edge cases, the merge path and
+containers — and `test_schema_key_safety.py` asserts the invariants Python can see.
+
+The rendered schemas are then checked into **luke-forms** as `fixtures/agent-schema-cases.json`,
+where `agentSchema.parity.test.ts` runs form-core's own validator over them, mirroring how
+`validation-parity.json` is shared with core-engine. Python cannot decide what a valid schema is;
+only form-core can. It also catches drift the other way — tighten `KEY_REGEX_SOURCE` or
+`RESERVED_KEYS` and that suite fails, instead of the agent quietly shipping schemas the product
+no longer accepts.
+:::
+
 `GET /health` is a **liveness** signal (always 200 if the process is up — Render health-checks it, so a downstream blip can't restart the instance) reporting the active brain, the transcript backend (with an `ephemeral` flag and write counters), the default agent, and the mounted agents. `GET /health/ready` is a **readiness** probe that checks real dependencies — a brain must be resolvable and the transcript store reachable (Postgres `SELECT 1`) — and returns **503** when a dependency is down. Startup/shutdown run via a lifespan context manager (not deprecated `on_event` hooks). `GET /metrics` is an open Prometheus scrape target (request volume + latency + status, transcript-write counters, and **`agents_llm_tokens_total{brain,model,type}`** — LLM token consumption, the fleet's primary cost signal; `llm.last_usage()` also exposes per-turn usage for per-tenant spend accounting). `GET /` serves the default agent's UI (or a landing page).
 
 The API is **versioned**: the canonical path is `/v1/agents/<slug>/...` (documented in a curated OpenAPI at `/openapi.json` — real description, the `X-Agents-Key` security scheme, a server entry, app version `1.0.0`). Legacy unversioned paths (`/agents/<slug>/...` and the default `form` agent at the root, e.g. `POST /chat`) keep working for drop-in compatibility and are hidden from the schema.
