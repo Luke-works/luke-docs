@@ -34,7 +34,7 @@ Each module owns its own tables (Flyway-managed) and REST surface. Modules are w
 |---|---|---|
 | **form** | `capability/form`, `form` | Form definitions, versions, submissions, embed tokens, event rail, submission PDFs, outbound send; contributes to the recipient portal via `FormRecipientItemProvider` |
 | **recipient** | `recipient` | Capability-agnostic recipient **portal** identity — per-tenant, account-less, authenticate-once (email/SMS-OTP + magic link), email-scoped sessions; aggregates open items across capabilities via the `RecipientItemProvider` SPI (front-end: **luke-portal**) |
-| **email** | `capability/email` | Email capability data layer — sending, OTP domain verification, per-tenant Postmark server, and inbound/outbound **email boxes**. Outbound boxes get a dedicated Postmark stream; inbound mail arrives via a public webhook (`/api/public/email/inbound/{token}`), is stored, and can trigger a workflow (`email.inbound`) |
+| **email** | `capability/email` | Email capability data layer — sending, OTP domain verification, per-tenant Postmark server, and inbound/outbound **email boxes**. Outbound boxes get a dedicated Postmark stream; inbound mail arrives via a public webhook (`/api/public/email/inbound/{token}`), is stored **with its body** (`luke_email_inbound`), routed by per-tenant **routing rules**, and turned into a review task — see [Email intake](#email-intake-inbound-mail-becomes-work) |
 | **emailtemplate** | `capability/emailtemplate` | Bounded email-template documents / assets |
 | **phone** | `capability/phone` | Vapi.ai inbound/outbound voice-call records and webhooks |
 | **signature** | `capability/signature` | Native PAdES e-sign ceremonies and signed-document state |
@@ -62,6 +62,72 @@ Capabilities that interact with a BPMN process do **not** call the engine direct
 ::: tip Why an outbox
 The outbox guarantees the capability's data commit and the "notify the process engine" action are atomic. If the engine is briefly unreachable, the state is durably recorded and the consumer retries — no lost submissions, no phantom process instances. Scheduling is enabled via `AsyncSchedulingConfig`.
 :::
+
+### Email intake (inbound mail becomes work)
+
+Mail sent to a registered **inbound box** becomes a task in the tenant's inbox. The path is
+`Postmark → POST /api/public/email/inbound/{token} → InboundEmailIntakeService`, and it does four
+things in order:
+
+1. **Dedup** on Postmark's `MessageID`. A provider that retries a webhook it believes failed must
+   not create a second review task — duplicated work for a human is the visible symptom of the one
+   failure mode a retrying provider guarantees. A partial unique index backs the in-request check.
+2. **Store** the envelope (`luke_email_messages`, direction `INBOUND`) *and* the content
+   (`luke_email_inbound` — body, headers, attachment metadata), sharing one primary key. Content is
+   stored even when the recipient matches no box, so nothing a tenant was sent is silently dropped.
+3. **Route** through `EmailRoutingRuleService` (below).
+4. **Start** the per-tenant `EmailInboxProcess`, whose user task is named/assigned/prioritised by
+   `EmailTaskRoutingListener`, and correlate any workflow subscribed to `email.inbound`.
+
+Everything after step 2 is best-effort: once the message is persisted the webhook has succeeded, and
+a routing or workflow fault must never make Postmark redeliver mail we already hold.
+
+::: warning Attachments are metadata only
+Postmark inlines attachment bytes as base64 in the webhook payload. Those bytes are **not**
+persisted and are **stripped from the process variable** — otherwise a 10 MB attachment became a
+10 MB Camunda variable, per message, copied on every process migration. Only name / content-type /
+length are recorded; file bytes belong in object storage (DOCUMENTS).
+:::
+
+#### Routing rules
+
+`luke_email_routing_rules` — ordered, per-tenant, optionally scoped to one box. Each rule tests a
+field (`FROM` | `SUBJECT` | `TO` | `BODY` | `ANY`) with an operator (`CONTAINS` | `EQUALS` |
+`STARTS_WITH` | `ENDS_WITH` | `REGEX`) and, on a match, sets the assignee, candidate group,
+priority, task name, a specific process to run instead, or suppresses the task entirely (for
+bounces and auto-replies).
+
+**First match wins** — actions do not accumulate. Overlapping rules are the norm ("from `billing@`"
+and "subject contains invoice"), and merging their actions would make the outcome depend on order in
+a way nobody could predict from reading one row. Managed at
+`/api/email-boxes/routing-rules` — mounted under the `/api/email-boxes` prefix deliberately, so it
+inherits that prefix's EMAIL capability gate and gateway auth filter and cannot ship ungated.
+
+::: danger Regex rules run on an unauthenticated surface
+A tenant writes the pattern; **anyone who can email the box writes the input**. `Pattern` has no
+timeout, so a catastrophically backtracking evaluation pins a request thread per message. Measured
+on the JDK we run (21): the textbook shapes (`(a+)+$`, `(x+x+)+y`) are optimised away, but a
+*backreference* still explodes — `(a+)+\1b` against 30 characters takes ~35 s. That matters because
+the rule need not look hostile; `\b(\w+)\s+\1\b` ("find a doubled word") is a backreference
+people copy routinely. Matching therefore runs against a **character-read budget**
+(`BudgetedCharSequence`), which turns that 35 s into ~30 ms and fails the match, not the message.
+Invalid regexes are rejected at authoring time, not on the webhook.
+:::
+
+#### The inbox is not forms-only
+
+`GET /api/form-inbox` has always returned **every** open user task for the tenant, so email tasks
+already appeared there — but each row was assumed to be a submission, so callers fetched
+`email-inbox-<id>` from the form-instance API and the row failed to open. Rows now carry a
+**`kind`**: `form` rows keep `instanceId` + `definitionCode`; `email` rows carry `emailMessageId`,
+`emailFrom`, `emailBox` and a null `instanceId`. The path keeps its historical name because it is
+registered by name in `ApiAuthFilter`.
+
+Read a received message with `GET /api/emails/{id}/inbound` (separate from `GET /api/emails/{id}`
+so a 50-row inbox render doesn't put every body on the wire).
+
+Retention covers both tables: the purge and the tenant-deletion cascade delete the content rows
+too, since deleting only the envelope would strand the message text with no row pointing at it.
 
 ## Key features
 

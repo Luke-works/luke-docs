@@ -24,7 +24,7 @@ The three MVP pillars, judged only on what the MVP needs:
 | Pillar | Backing | MVP verdict |
 | --- | --- | --- |
 | **Forms** | [luke-forms](/libraries/forms) 94 (Ready) · core-engine forms data-layer + design-time lifecycle · [consumer-ui](/apps/consumer-ui) builder/renderer | <span class="pill ready">Ready</span> — headless engine is the fleet's strongest repo; builder cut over; embed + submissions shipped. |
-| **Email** | [luke-email](/libraries/email) 93 · core-engine email data-layer + async delivery (retry/backoff/metrics) · Postmark send as a Camunda task | <span class="pill ready">Ready</span> — headless template engine + hardened outbound; no known MVP-blocking gap. |
+| **Email** | [luke-email](/libraries/email) 93 · core-engine email data-layer + async delivery (retry/backoff/metrics) · Postmark send as a Camunda task · **inbound intake** (stored body, dedup, routing rules → review task) | <span class="pill ready">Ready</span> — headless template engine, hardened outbound, and inbound mail now becomes work in the unified [Inbox](/apps/consumer-ui); no known MVP-blocking gap. |
 | **Access** | core-engine **RBAC/ABAC** (RoleCatalog SSOT, named actions, capability grants, owner-implicit access, tenant fail-closed, durable audit) · [auth-engine](/services/auth-engine) 93 (Ready) authentication · consumer-ui access UI (contributor level) | <span class="pill ready">Ready</span> — authorization owned + enforced by the engine; WorkOS is auth-only. RBAC depth complete (#104 closed; AC-1/AC-2 shipped, AC-3 = optional dsync convenience externalized to #105). |
 
 **Authorization ownership (locked):** RBAC **and** ABAC are owned and enforced by **core-engine**;
