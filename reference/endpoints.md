@@ -283,8 +283,11 @@ opt-in (`luke.plan.enforce-usage-limits`, `luke.plan.enforce-capability-tiers` â
 | --- | --- | --- | --- |
 | GET | `/api/plan` | Caller's tier, limits, features, capabilities | Tenant |
 | GET | `/api/usage` | Used-vs-limit per metric this month | Tenant |
+| GET | `/api/billing/config` | Is checkout wired + which tiers are buyable | Tenant |
+| POST | `/api/billing/checkout` | Start Stripe Checkout for a tier â†’ `{ url }` | Tenant |
+| POST | `/webhooks/stripe` | Stripe billing events (applies the paid plan) | Stripe signature |
 | GET | `/api/tenants/{tenantId}/plan` | One tenant's stored plan + badge rule | Operator-Basic |
-| PUT | `/api/tenants/{tenantId}/plan` | Set a tenant's tier (billing write-back seam) | Operator-Basic |
+| PUT | `/api/tenants/{tenantId}/plan` | Set a tenant's tier (manual write) | Operator-Basic |
 
 ---
 
