@@ -74,5 +74,6 @@ Two backing stores enforce isolation differently:
 ## See also
 
 - [Authentication & Authorization](/concepts/auth) — how tenant context is carried and enforced.
+- [Plans, Limits & Usage](/concepts/plans) — a tenant's commercial tier, limits and metered usage.
 - [Core Engine](/services/core-engine) — the tenant filters and ownership model.
 - [Deployment Topology](/concepts/deployment) — schema isolation across dev/qa/uat.

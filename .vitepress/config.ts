@@ -60,6 +60,7 @@ export default withMermaid(defineConfig({
           { text: 'Capabilities', link: '/concepts/capabilities' },
           { text: 'Authentication & Authorization', link: '/concepts/auth' },
           { text: 'Multi-Tenancy', link: '/concepts/tenancy' },
+          { text: 'Plans, Limits & Usage', link: '/concepts/plans' },
           { text: 'Deployment Topology', link: '/concepts/deployment' },
         ],
       },

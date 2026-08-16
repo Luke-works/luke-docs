@@ -73,6 +73,15 @@ externalized to the standalone luke-tasks / TLM product.
 **Fleet average overall ≈ 81%.**
 
 ::: tip Recent uplifts
+**Commercial model made real (2026-08).** The pricing model is now enforced in the engine, not just
+on a marketing page. `PlanCatalog` is the SSOT for four tiers (`FREE / PRO / BUSINESS / ENTERPRISE`,
+limits + entitlements inline; self-serve `GET /api/plan`), and **usage metering** (`luke_usage_counter`,
+`GET /api/usage`) counts submissions and emails per month — surfaced as a **"Usage this month"** section
+on the consumer-ui **Plans** page. Both the usage-limit and capability-tier gates are **opt-in**
+(`luke.plan.enforce-usage-limits` / `luke.plan.enforce-capability-tiers`, default off), so dev/qa count
+without blocking. This is the tier-aware billing layer the agents cost-control note (below) flagged as the
+next step; Stripe checkout wiring is the remaining piece. See [Plans, Limits & Usage](/concepts/plans).
+
 **Production-readiness prep (2026-07-27/28).** With MVP hardening done, go-live is being staged as three
 tracked verticals in `luke-platform` — Observability ([#13](https://github.com/Luke-works/luke-platform/issues/13)),
 Prod cutover ([#14](https://github.com/Luke-works/luke-platform/issues/14)), WorkOS→Prod RBAC

@@ -274,6 +274,20 @@ Documents are stored via `luke-file-proxy` brokers, with the core-engine holding
 
 ---
 
+## Plans, Usage & Billing
+
+Base service: `luke-core-engine`. See [Plans, Limits & Usage](/concepts/plans). Enforcement is
+opt-in (`luke.plan.enforce-usage-limits`, `luke.plan.enforce-capability-tiers` — both default off).
+
+| Method | Path | Purpose | Auth |
+| --- | --- | --- | --- |
+| GET | `/api/plan` | Caller's tier, limits, features, capabilities | Tenant |
+| GET | `/api/usage` | Used-vs-limit per metric this month | Tenant |
+| GET | `/api/tenants/{tenantId}/plan` | One tenant's stored plan + badge rule | Operator-Basic |
+| PUT | `/api/tenants/{tenantId}/plan` | Set a tenant's tier (billing write-back seam) | Operator-Basic |
+
+---
+
 ## Access, Capabilities & Subscriptions
 
 Base service: `luke-core-engine`. See the [Access deep-dive](/capabilities/access).
