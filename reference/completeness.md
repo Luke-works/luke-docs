@@ -82,8 +82,12 @@ on the consumer-ui **Plans** page. Both the usage-limit and capability-tier gate
 without blocking. **Stripe checkout** then closed the loop: a config-gated `billing` module mints a hosted
 Checkout Session and applies the result via a signature-verified `/webhooks/stripe` (the browser never
 sets a plan), with the Plans-page **Upgrade** buttons wired through. The whole integration self-disables
-without `STRIPE_SECRET_KEY`, so dev/qa never touch Stripe. This is the tier-aware billing layer the agents
-cost-control note (below) flagged as the next step. See [Plans, Limits & Usage](/concepts/plans).
+without `STRIPE_SECRET_KEY`, so dev/qa never touch Stripe. Finally the metering surface was rounded out:
+a live **storage gauge** (a SUM of the tenant's non-deleted document bytes) joined submissions/emails on
+`/api/usage` and the Plans page, and the agents fleet's per-tenant daily token cap became **tier-aware**
+(`AGENTS_TOKEN_CAP_<TIER>` keyed off an `X-Tenant-Tier` header — the very tier-aware layer the agents
+cost-control note below anticipated). All default-lenient: unset = off. See
+[Plans, Limits & Usage](/concepts/plans).
 
 **Production-readiness prep (2026-07-27/28).** With MVP hardening done, go-live is being staged as three
 tracked verticals in `luke-platform` — Observability ([#13](https://github.com/Luke-works/luke-platform/issues/13)),
