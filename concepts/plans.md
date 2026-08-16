@@ -84,26 +84,60 @@ bite; everywhere else keeps working unchanged. See [Deployment Topology](/concep
 
 ## Who writes the plan
 
-A tenant's plan is **operator-set today** — the seam a real billing integration (Stripe
-checkout + webhook) will write to next, without any consumer needing to change:
+Two writers, one seam. An **operator** can set any tenant's tier by hand; **Stripe** writes the
+same seam automatically once billing is wired. Neither requires a downstream consumer to change —
+they both land in the one `TenantPlan` row that `GET /api/plan` reads.
 
 | Endpoint | Auth | Purpose |
 | --- | --- | --- |
 | `GET /api/plan` | Tenant (`X-Tenant-Id`) | The caller's tier, limits, features, capabilities — what the Plans page reads. |
 | `GET /api/usage` | Tenant (`X-Tenant-Id`) | Used-vs-limit per metric this month — what the usage bars read. |
+| `GET /api/billing/config` | Tenant (`X-Tenant-Id`) | Whether checkout is wired + which tiers are buyable — the UI shows Upgrade only when this says so. |
+| `POST /api/billing/checkout` | Tenant (`X-Tenant-Id`) | Start Stripe Checkout for a tier → a hosted URL to redirect to. |
+| `POST /webhooks/stripe` | Stripe **signature** | The truth: applies the paid plan after Stripe confirms. |
 | `GET /api/tenants/{tenantId}/plan` | Operator-Basic | One tenant's stored plan + badge rule. |
-| `PUT /api/tenants/{tenantId}/plan` | Operator-Basic | Set a tenant's tier (the billing write-back seam). |
+| `PUT /api/tenants/{tenantId}/plan` | Operator-Basic | Set a tenant's tier by hand. |
+
+## Billing (Stripe)
+
+Checkout is a config-gated Stripe integration (`billing` module). With `STRIPE_SECRET_KEY` unset
+the whole module self-disables — checkout `404`s, the webhook no-ops — so dev/qa and any un-wired
+environment never touch the network. When it's wired:
+
+```mermaid
+flowchart LR
+  ui["Plans page<br/>Upgrade → PRO"]:::ext
+  co["POST /api/billing/checkout"]:::core
+  stripe["Stripe Checkout<br/>(hosted)"]:::ext
+  hook["POST /webhooks/stripe<br/>signature-verified"]:::core
+  seam["PlanService.applyPlan<br/>→ TenantPlan row"]:::core
+  ui --> co --> stripe -->|pays| hook --> seam
+  classDef core fill:#fff2e8,stroke:#e8590c,color:#9a3412;
+  classDef ext fill:#eef2f7,stroke:#8a99ad,color:#33415c;
+```
+
+The **browser is never trusted to set a plan** — checkout only mints a session; the plan changes
+only when the signature-verified webhook says Stripe was paid. `checkout.session.completed` upgrades,
+`customer.subscription.updated` tracks a tier change, and `customer.subscription.deleted` (or a lapsed
+status) downgrades to Free. The webhook is mounted **outside `/api/**`** (at `/webhooks/stripe`)
+because Stripe carries no gateway or tenant credential — its authentication *is* the signature.
+
+Price ids map a tier to a Stripe Price (`STRIPE_PRICE_PRO` / `STRIPE_PRICE_BUSINESS`); a tier with no
+configured price simply isn't buyable self-serve, so `Free` (a downgrade) and `Enterprise` (a sales
+motion) never are.
 
 ## In the product
 
 The [Consumer UI](/apps/consumer-ui) **Plans** page renders the tier comparison, the tenant's
 current plan, and a **"Usage this month"** section: per-metric bars of submissions and emails
 against the plan's limits (the bar turns red and prompts an upgrade at the cap; unlimited tiers
-show the running count only). It fails soft — a usage hiccup never hides the plan.
+show the running count only). It fails soft — a usage hiccup never hides the plan. When
+`GET /api/billing/config` reports billing is wired, each purchasable tier's **Upgrade** button opens
+Stripe Checkout; otherwise it falls back to a sales-contact link.
 
 ## See also
 
-- [Core Engine](/services/core-engine) — the `branding` module (PlanCatalog) and metering.
+- [Core Engine](/services/core-engine) — the `branding` (PlanCatalog), `usage` and `billing` modules.
 - [Multi-Tenancy](/concepts/tenancy) — a plan is a per-tenant fact, resolved fail-closed.
 - [Capabilities](/concepts/capabilities) — tiers gate which capabilities a tenant may subscribe to.
-- [Endpoint reference](/reference/endpoints#plans-usage-billing) — the plan/usage routes.
+- [Endpoint reference](/reference/endpoints#plans-usage-billing) — the plan/usage/billing routes.

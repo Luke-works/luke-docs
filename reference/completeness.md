@@ -79,8 +79,11 @@ limits + entitlements inline; self-serve `GET /api/plan`), and **usage metering*
 `GET /api/usage`) counts submissions and emails per month — surfaced as a **"Usage this month"** section
 on the consumer-ui **Plans** page. Both the usage-limit and capability-tier gates are **opt-in**
 (`luke.plan.enforce-usage-limits` / `luke.plan.enforce-capability-tiers`, default off), so dev/qa count
-without blocking. This is the tier-aware billing layer the agents cost-control note (below) flagged as the
-next step; Stripe checkout wiring is the remaining piece. See [Plans, Limits & Usage](/concepts/plans).
+without blocking. **Stripe checkout** then closed the loop: a config-gated `billing` module mints a hosted
+Checkout Session and applies the result via a signature-verified `/webhooks/stripe` (the browser never
+sets a plan), with the Plans-page **Upgrade** buttons wired through. The whole integration self-disables
+without `STRIPE_SECRET_KEY`, so dev/qa never touch Stripe. This is the tier-aware billing layer the agents
+cost-control note (below) flagged as the next step. See [Plans, Limits & Usage](/concepts/plans).
 
 **Production-readiness prep (2026-07-27/28).** With MVP hardening done, go-live is being staged as three
 tracked verticals in `luke-platform` — Observability ([#13](https://github.com/Luke-works/luke-platform/issues/13)),
