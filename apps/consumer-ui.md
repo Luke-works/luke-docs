@@ -120,6 +120,7 @@ Routes for a capability are wrapped in a `CapabilityRoute` guard. The MVP surfac
 | Workflow | `WORKFLOW` | `/workflow`, `/workflow/connections`, `/workflow/:id` |
 | Analytics | `FORMS` + flag | `/analytics` (hidden unless `VITE_ANALYTICS_ENABLED`) |
 | Access | — | `/access` |
+| Plans | — | `/plans` — tier comparison, current plan, and **usage this month** (submissions/emails vs limits) |
 | Account | — | `/account/profile`, `/account/settings` |
 | Support | — | `/support` |
 | Auth | — | `/signin`, `/signup`, `/sso-callback` |
@@ -217,6 +218,12 @@ mid-load.
   grants renders a source badge and locks the control when access is owned by an
   external identity system. The backend does not stamp a source yet, so nothing is
   labelled today; the UI lights up when it starts arriving.
+- **Plans & usage** — the `/plans` page (`lib/planApi`, `lib/usageApi`) reads the tenant's
+  tier from `GET /api/plan` and its month-to-date consumption from `GET /api/usage`, rendering
+  a tier comparison, the current plan, and a **"Usage this month"** section: per-metric bars
+  (submissions, emails) of used-vs-limit. Fails soft — a usage hiccup never hides the plan; the
+  bar turns red and prompts an upgrade at the cap, and unlimited tiers show the count only. See
+  [Plans, Limits & Usage](/concepts/plans).
 - **Tenant switching** — multi-tenant session switching in the sidebar.
 - **AI assist panels** — per-capability assistants (forms, email, workflow) calling
   the `luke-agents` fleet.
