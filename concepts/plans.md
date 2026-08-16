@@ -66,6 +66,17 @@ Recording is **best-effort and off the critical path**: `UsageService.record` ru
 submit or a send. `GET /api/usage` returns used-vs-limit per metric for the current billing
 month.
 
+**Storage is a gauge, not a counter.** Bytes stored aren't *accumulated* month by month — they're
+*occupied* right now — so storage is read live rather than tallied: `UsageService` sums the tenant's
+non-deleted `luke_document` bytes (signed PDFs register there too) through a `StorageUsageProvider`
+SPI and folds a `storage` row (`used`/`limit` in **bytes**; limit = `tier.storageGb × 1e9`) into the
+same `/api/usage` snapshot. It's resilient — a gauge failure reports 0 and never breaks the read.
+
+**AI actions are metered in `luke-agents`, not here.** The agents fleet enforces a **per-tenant daily
+token cap sized by tier** — `AGENTS_TOKEN_CAP_<TIER>` keyed off the `X-Tenant-Tier` header (the tier
+core-engine already resolved), falling back to a flat cap. Same default-lenient rule: unset = no cap.
+See [Agents → per-tenant token cap](/services/agents).
+
 ## Enforcement is opt-in (default-lenient)
 
 Both gates are **off by default** and only bite when their flag is set — so dev/qa (and prod
@@ -129,9 +140,10 @@ motion) never are.
 ## In the product
 
 The [Consumer UI](/apps/consumer-ui) **Plans** page renders the tier comparison, the tenant's
-current plan, and a **"Usage this month"** section: per-metric bars of submissions and emails
-against the plan's limits (the bar turns red and prompts an upgrade at the cap; unlimited tiers
-show the running count only). It fails soft — a usage hiccup never hides the plan. When
+current plan, and a **"Usage this month"** section: per-metric bars of submissions, emails and
+**storage** (bytes rendered as KB/MB/GB) against the plan's limits (the bar turns red and prompts an
+upgrade at the cap; unlimited tiers show the running count only). It fails soft — a usage hiccup
+never hides the plan. When
 `GET /api/billing/config` reports billing is wired, each purchasable tier's **Upgrade** button opens
 Stripe Checkout; otherwise it falls back to a sales-contact link.
 

@@ -221,7 +221,8 @@ mid-load.
 - **Plans, usage & upgrade** — the `/plans` page (`lib/planApi`, `lib/usageApi`, `lib/billingApi`)
   reads the tenant's tier from `GET /api/plan` and its month-to-date consumption from
   `GET /api/usage`, rendering a tier comparison, the current plan, and a **"Usage this month"**
-  section: per-metric bars (submissions, emails) of used-vs-limit. Fails soft — a usage hiccup never
+  section: per-metric bars (submissions, emails, and a live **storage** gauge rendered KB/MB/GB) of
+  used-vs-limit. Fails soft — a usage hiccup never
   hides the plan; the bar turns red and prompts an upgrade at the cap, and unlimited tiers show the
   count only. When `GET /api/billing/config` reports Stripe is wired, each purchasable tier's
   **Upgrade** button opens Stripe Checkout (`POST /api/billing/checkout` → redirect); otherwise it
