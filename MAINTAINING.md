@@ -57,22 +57,21 @@ Use these inline in Markdown (defined in `.vitepress/theme/custom.css`):
 
 ## Access control (the login gate)
 
-The Render deploy stays a plain **static site** — but the public hostname
-`docs.lukeflow.com` is fronted by a **Cloudflare Worker** that gates it, so only a Lukeflow
-**operator/admin** can read the manual. Authoring is unaffected: `npm run docs:dev` runs the
-raw VitePress dev server with **no** gate.
+The manual is **served behind a login** — only a Lukeflow **operator/admin** can read it.
+Authoring is unaffected: `npm run docs:dev` runs the raw VitePress dev server with **no**
+gate.
 
-- **How it works** — the Worker (`edge/worker.js`, on route `docs.lukeflow.com/*`) redirects an
-  unauthenticated request to `/login`, forwards the form's username + password **edge-to-service**
-  to core-engine `GET /api/me`, and issues a signed HttpOnly session cookie only when the caller
-  is an operator (`operator === true`). Authenticated requests pass straight through to the static
-  origin. Because the check is edge-side, no CORS / `ALLOWED_ORIGINS` change on core-engine is
-  needed. Same identity as core-ui — same admin credentials.
-- **Deploy / config** — see `edge/README.md`. Two Cloudflare secrets: `DOCS_CORE_ENGINE_URL`
-  (login is fail-closed until set) and `DOCS_SESSION_SECRET` (rotating it logs everyone out);
-  `DOCS_ALLOW_TENANT_ADMIN=true` (a `wrangler.toml` var) also admits org-admins.
-- **Roll back** — `npx wrangler delete` removes the Worker + route; the site reverts to the open
-  static origin instantly.
+- **How it works** — the deploy no longer serves static files directly. `server/index.mjs`
+  (a tiny Express app) wraps `.vitepress/dist`: an unauthenticated request is redirected to
+  `/login`, the form's username + password are forwarded **server-to-server** to core-engine
+  `GET /api/me`, and a signed HttpOnly session cookie is issued only when the caller is an
+  operator (`operator === true`). Because the check is server-side, no CORS / `ALLOWED_ORIGINS`
+  change on core-engine is needed. Same identity as core-ui — same admin credentials.
+- **Run the gated build locally** — `npm run serve` (build + serve). Point it at an engine
+  with `DOCS_CORE_ENGINE_URL=…` (see `.env.example`). Sign out at `/logout`.
+- **Config** (Render dashboard) — `DOCS_CORE_ENGINE_URL` must be set or login is fail-closed;
+  `DOCS_SESSION_SECRET` is a rendered random value (rotating it logs everyone out);
+  `DOCS_ALLOW_TENANT_ADMIN=true` also admits org-admins. Full list in `.env.example`.
 
 ## Periodic re-audit (safety net)
 
