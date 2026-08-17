@@ -7,14 +7,7 @@
   "scripts": {
     "docs:dev": "vitepress dev",
     "docs:build": "vitepress build",
-    "docs:preview": "vitepress preview",
-    "start": "node server/index.mjs",
-    "serve": "npm run docs:build && node server/index.mjs"
-  },
-  "dependencies": {
-    "cookie-parser": "^1.4.7",
-    "express": "^4.21.2",
-    "sirv": "^2.0.4"
+    "docs:preview": "vitepress preview"
   },
   "devDependencies": {
     "mermaid": "^11.16.0",

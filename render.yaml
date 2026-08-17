@@ -1,39 +1,41 @@
 # Render Blueprint — Lukeflow documentation site.
 #
-# The manual is a static VitePress build, but it is served through a small Node gate
-# (server/index.mjs) so only Lukeflow operators/admins can read it. The gate validates
-# the submitted credentials against core-engine `GET /api/me` (server-to-server) and
-# issues a signed, HttpOnly session cookie. This is a multi-page site (not an SPA), so
-# there is deliberately NO catch-all rewrite — the server resolves clean URLs to the
-# built .html files and serves the generated 404.html for genuine not-founds.
+# A static VitePress build. This is a multi-page static site (not an SPA), so there is
+# deliberately NO catch-all rewrite to /index.html — that would break deep links. Render
+# resolves clean URLs (e.g. /services/core-engine) to the built .html files, and serves the
+# generated 404.html for genuine not-founds.
 services:
   - type: web
     name: luke-docs
-    runtime: node
-    # Only rebuild when the docs or the server actually change.
+    runtime: static
+    # Only rebuild when the docs actually change.
     buildFilter:
       paths:
         - "**/*.md"
         - ".vitepress/**"
-        - "server/**"
         - "package.json"
         - "package-lock.json"
         - "render.yaml"
     buildCommand: npm ci && npm run docs:build
-    startCommand: npm start
-    healthCheckPath: /healthz
+    staticPublishPath: ./.vitepress/dist
     pullRequestPreviewsEnabled: true
     envVars:
       - key: NODE_VERSION
         value: "22"
-      # Base URL of the deployed luke-core-engine — the identity source for the login
-      # gate. Login is fail-closed (nobody in) until this is set. Set in the dashboard.
-      - key: DOCS_CORE_ENGINE_URL
-        sync: false
-      # HMAC key that signs session cookies. Rendered as a stable random value so
-      # sessions survive restarts; rotating it logs everyone out.
-      - key: DOCS_SESSION_SECRET
-        generateValue: true
-      # Optional: also admit org-admins (a `tenant-admin` role), not just operators.
-      - key: DOCS_ALLOW_TENANT_ADMIN
-        value: "false"
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=31536000; includeSubDomains
+      # Immutable caching for the fingerprinted asset bundles VitePress emits.
+      - path: /assets/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable

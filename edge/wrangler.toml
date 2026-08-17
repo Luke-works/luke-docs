@@ -1,0 +1,25 @@
+# Cloudflare Worker that gates docs.lukeflow.com behind a core-engine operator login.
+# Deploy from this directory:  npx wrangler@latest deploy
+# (See README.md for the one-time secret setup.)
+
+name = "luke-docs-gate"
+main = "worker.js"
+compatibility_date = "2026-08-01"
+
+# Run the gate in front of the docs hostname — apex path and everything under it.
+# The Worker's pass-through subrequests reach the Render static origin without
+# re-invoking the Worker (same-zone subrequests skip Worker routes).
+routes = [
+  { pattern = "docs.lukeflow.com/*", zone_name = "lukeflow.com" }
+]
+
+[vars]
+# Operators only by default. Set "true" to also admit org-admins (tenant-admin role).
+DOCS_ALLOW_TENANT_ADMIN = "false"
+# Optional: pin the origin the gate proxies to (e.g. "https://luke-docs.onrender.com").
+# Leave unset to pass through to the zone's own origin.
+# DOCS_ORIGIN = ""
+
+# Secrets are NOT stored here — set them once with `wrangler secret put`:
+#   DOCS_SESSION_SECRET    (any long random string; rotating it logs everyone out)
+#   DOCS_CORE_ENGINE_URL   (e.g. https://luke-core-engine.onrender.com — no trailing slash)

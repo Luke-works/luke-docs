@@ -12,6 +12,8 @@ export default withMermaid(defineConfig({
   lang: 'en-US',
   cleanUrls: true,
   lastUpdated: true,
+  // edge/ is the Cloudflare access-gate tooling, not manual content — keep it out of the build.
+  srcExclude: ['edge/**'],
   // Pages cross-link liberally; don't fail the build on an in-progress link.
   // Dead links FAIL the build. The manual's value is that its cross-references are
   // trustworthy; a link that 404s is worse than no link, because it reads as verified.
