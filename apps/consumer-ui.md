@@ -218,6 +218,16 @@ mid-load.
   grants renders a source badge and locks the control when access is owned by an
   external identity system. The backend does not stamp a source yet, so nothing is
   labelled today; the UI lights up when it starts arriving.
+- **Payments** — **Forms → Payments** (`/forms/payments`, `PaymentsSettings`) connects the workspace's own
+  Stripe account (owner only; members see the status) and is where Stripe Connect returns the owner
+  (`?code=&state=` is completed exactly once, even under StrictMode). The builder only offers the
+  Payment field when the plan and platform allow it, warns when a payment form can't go live yet, and
+  shows the server's reason when a publish is refused. The public embed and respond pages mount Stripe's
+  card form through `lib/formPayments` + `@lukeflow/form-react/stripe`, pay the server-priced charge (only
+  without asking when it equals the total the field showed; otherwise the pay step asks first),
+  fall back to a pay-only step after a decline, and let a returning recipient resume. The in-app fill
+  page explains that a payment form must be filled by the payer. Submission details show the charge
+  with a link into Stripe. See [Forms → Payments](/capabilities/forms#payments-stripe-bring-your-own-account).
 - **Plans, usage & upgrade** — the `/plans` page (`lib/planApi`, `lib/usageApi`, `lib/billingApi`)
   reads the tenant's tier from `GET /api/plan` and its month-to-date consumption from
   `GET /api/usage`, rendering a tier comparison, the current plan, and a **"Usage this month"**

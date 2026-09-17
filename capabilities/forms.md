@@ -519,6 +519,118 @@ fails closed rather than offering a feature the server then refuses.
 "did the author ask for it" and "are they entitled to it" as two separate questions rather than one
 flag that means neither.
 
+## Payments (Stripe, bring your own account)
+
+A form can take a **card payment** as part of submitting. Each workspace connects **its own Stripe
+account** (Connect OAuth); charges are **direct charges** on that account, so the tenant is the
+merchant of record — their descriptor, receipts, payouts, refunds and disputes. Lukeflow never holds
+funds and takes **no application fee**; payments are an entitlement of the **Pro** plan and up
+(`PlanCatalog.payments`). The whole feature is **config-gated** on the platform's Stripe keys.
+
+**Pricing is the server's.** The `payment` field is priced one of three ways, and a browser-computed
+total is never trusted — which is why there is no formula mode (the engine validates answers but does
+not re-run form expressions):
+
+| Mode | Amount | The respondent controls |
+| --- | --- | --- |
+| `fixed` | `amountMinor` | nothing |
+| `perUnit` | `amountMinor × quantity` (≤ `maxQuantity`, default 100) | a whole-number quantity field |
+| `entered` | the respondent's amount, between `minAmountMinor` and `maxAmountMinor` | an amount field |
+
+A source field must be a **required, plain** `number`/`currency` field that is placed on the form.
+It can't be calculated, hidden, disabled, conditional, or inside a grid. For an entered amount, a
+`currency` field must show the payment's own currency, and the field may not allow more decimal
+places than that currency charges. form-core's `payment-amount-source` diagnostic blocks publishing
+anything else.
+
+The payment field itself has rules too:
+- It must be placed on the form (`payment-unreachable`).
+- It can't be conditional (including `customConditionalJs`) or sit inside a conditional container.
+  Both languages refuse to price it: the server can't tell whether the payment was due.
+- In a multi-page form, it and every submit button must be on the **last** page
+  (`payment-wizard-page`), because the card form only exists while its page is showing.
+
+The rules follow the engine exactly:
+- Containment is read from `children` (not `parentId`); a numeric reference counts like a property key.
+- `hidden`/`disabled` use JavaScript truthiness.
+- An `entities` array is keyed by position, as the renderer reads it (the server's submission
+  validator does the same).
+
+The pricing function exists twice: form-core `resolvePaymentAmount` for the payer's preview, and
+core-engine `PaymentAmountResolver` for the charge. The shared `payment-parity.json` fixture (167
+cases plus the currency table) runs in both test suites.
+
+**Lifecycle.**
+
+```mermaid
+flowchart LR
+  sub["submit (embed / respond)"]:::core --> price["price from schema + answers"]:::core
+  price --> held["instance AWAITING_PAYMENT<br/>luke_form_payment CREATING"]:::core
+  held --> pi["PaymentIntent on the tenant's account<br/>card-only · idempotent"]:::ext
+  pi --> pay["payer confirms<br/>(Stripe Payment Element)"]:::ext
+  pay --> settle["settle from Stripe's state<br/>(sync · Connect webhook · reconciler)"]:::core
+  settle -->|succeeded| done["SUBMITTED → outbox + forms.submitted"]:::core
+  settle -->|abandoned: cancel at Stripe first| rel["embed → CANCELLED<br/>respond → IN_PROGRESS"]:::core
+```
+
+- Nothing is queued to a process, no workflow event fires and no usage is metered until Stripe says
+  the charge **succeeded** — every settlement path re-reads the intent from Stripe rather than trusting
+  a request or an event body, and checks amount, currency and mode match what was priced.
+- **No surprise amounts.** The browser confirms a charge on its own only when the server's amount
+  equals the total the payment field showed. Otherwise the pay-only step names the real amount and
+  waits for the payer.
+  - An embed submission also sends the version it rendered. A payment form served at a newer version
+    refuses the submission with `409`.
+  - The respond page previews against the **served** schema, not the copy with the preparer's fields
+    locked.
+- A declined card keeps the same charge payable: the payer retries from a pay-only step, which first
+  re-reads the charge. After any confirmation attempt, even a failed one, the page asks the server
+  what happened, so a charge Stripe took counts as paid.
+- If the charge can't be *started* (Stripe unreachable), the submission stays saved and the page
+  offers **Try again** (`POST …/payments/{instanceId}` for the embed, `…/payment` for respond).
+- A recipient who leaves mid-payment can verify again and resume. Resuming restarts the abandonment
+  clock.
+- A paid submission returned for correction asks for no card and is not charged twice
+  (`payment.alreadyPaid` in the render). Before it is resubmitted, its charge is re-read from Stripe.
+  A **refunded or disputed** one can't be resubmitted (`409`); disputes arrive through
+  `charge.dispute.*` and are audited as `payments.disputed`.
+- On an emailed-link form, a preparer-owned quantity or amount is priced from the preparer's prefill.
+- **A payment row is never lost while its intent could take money.**
+  - A late intent for an attempt that has already ended is cancelled and never handed out.
+  - An intent changed in Stripe is cancelled as soon as the payer returns.
+  - A charge the platform can no longer read ends as `UNRESOLVED`: it is released, audited as
+    `payments.unresolved`, and re-checked daily. It blocks a resubmission until Stripe says what
+    happened. Lost access is decided from the **account** (a revoked grant disconnects the workspace),
+    never from a bare 403/404.
+- The reconciler runs on its own thread under a per-run time budget. It takes the oldest charges
+  first, and a charge that keeps failing is retried on the next run, behind the others. It claims a
+  charge under its lock before cancelling it, so a returning payer is never handed a secret that is
+  about to be voided.
+- The **in-app** door refuses payment forms (staff would be keying in someone else's card), and the
+  generic state-transition endpoint cannot move a submission into or out of `AWAITING_PAYMENT`.
+- **Publishing** a payment form, or **pinning** embeds to a version that has one, is refused (`422`
+  misconfigured, `409` not ready) unless the payment is sound and the workspace has a connected account
+  that can take charges. The in-app **Fill** page checks the published version first
+  (`takesPayment` in `GET …/by-code/{code}/fields`) and creates no instance for a payment form.
+- **Disconnecting** marks the account `DISCONNECTING`, so it takes no new charges. It then cancels the
+  workspace's unpaid charges at Stripe, re-reading them until none are left; a *processing* charge
+  blocks the disconnect (`409`). The Stripe grant is revoked only if no other connected workspace uses
+  the same account. If a cancel or the revoke fails, the account goes back to connected (`502`) so the
+  owner can retry.
+- A deauthorization event is checked against Stripe before it disconnects anything, so a late retry
+  can't undo a reconnection. The payments page also notices a revoked account the next time it re-reads
+  the account.
+- The Stripe Connect return is completed for the workspace that **started** it, and the page switches
+  to that workspace.
+- A **tenant purge** removes the payment rows and the account's webhook-event rows. After it commits,
+  it makes a best-effort attempt to cancel the tenant's open intents and to revoke the grant.
+- **Card only, wallets off** — forms are commonly iframed, where redirect-based methods break, and
+  Apple/Google Pay need per-domain registration on every connected account. Stripe.js loads only from
+  `js.stripe.com`; the embed page's CSP allows exactly that plus `hooks.stripe.com` (3-D Secure).
+
+Setup, the test-mode checklist, go-live and incident handling:
+`luke-core-engine/docs/runbooks/form-payments.md`.
+
 ## Endpoints
 
 | Method | Path | Purpose | Auth model |
@@ -543,6 +655,14 @@ flag that means neither.
 | GET | `/respond/{token}` | Engine-hosted respond page | Public |
 | POST | `/api/public/form-instances/{token}/otp` · `/verify` | Recipient OTP challenge / verify | Public (token) |
 | GET/PATCH/POST | `/api/public/form-instances/{token}` · `/submit` | Recipient render / autosave / submit | Public (token + access token) |
+| POST | `/api/public/embed/{token}/payments/{instanceId}` | Start / resume a saved embed submission's charge | Public (token, rate-limited) |
+| POST | `/api/public/embed/{token}/payments/{instanceId}/sync` | Re-read a submission's charge from Stripe and settle it | Public (token, rate-limited) |
+| POST | `/api/public/form-instances/{token}/payment` · `/payment/sync` | Resume / settle a recipient's charge | Public (token + access token) |
+| GET | `/api/payments/account` | Workspace payment status (enabled · plan · connected account · ready) | Member |
+| POST | `/api/payments/connect` · `/connect/complete` | Start / finish Stripe Connect OAuth | Workspace owner |
+| POST · DELETE | `/api/payments/account/refresh` · `/api/payments/account` | Re-read / disconnect the account | Workspace owner |
+| GET | `/api/payments/submissions/{instanceId}` | A submission's charge (no secrets) | Member with FORMS read |
+| POST | `/webhooks/stripe-connect` | Connected-account events (settles charges, account status) | Stripe signature |
 | GET | `/portal/{tenantToken}` | Engine-hosted recipient portal page | Public (origin-gated) |
 | — | `/api/public/portal/**` · `/portal/{tenantToken}` | Recipient portal identity + item listing (capability-agnostic) | See [Recipient Portal](/apps/portal) |
 | GET/PUT | `/api/tenants/{tenantId}/plan` | Read / set a tenant's plan (FREE\|PAID) — gates hiding the Lukeflow badge | Operator credential |

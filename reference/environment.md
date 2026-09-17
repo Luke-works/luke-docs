@@ -102,6 +102,23 @@ no setup; production activates the `postgres,prod` profiles.
 | `LUKE_SECRETS_ACTIVE_KEY_ID` | Active AES-256-GCM key id | `dev` | No |
 | `LUKE_SECRETS_KEY_DEV` | AES-256-GCM master key material | `dev-secrets-master-key-change-me` | **Yes** |
 
+### Form payments (Stripe Connect)
+
+All unset → payments self-disable. Test and live keys must not be mixed. Setup and go-live:
+`luke-core-engine/docs/runbooks/form-payments.md`.
+
+| Variable | Purpose | Default | Secret? |
+| --- | --- | --- | --- |
+| `STRIPE_SECRET_KEY` | Platform secret key, shared with billing (`STRIPE_CONNECT_SECRET_KEY` overrides it for payments) | *(unset → off)* | **Yes** |
+| `STRIPE_PUBLISHABLE_KEY` | Platform publishable key sent to payers' browsers | *(unset → off)* | No |
+| `STRIPE_CONNECT_CLIENT_ID` | Connect OAuth `client_id` (`ca_…`) | *(unset → off)* | No |
+| `STRIPE_CONNECT_WEBHOOK_SECRET` | Signing secret of the connected-accounts endpoint `/webhooks/stripe-connect`. Strongly recommended: without it a revocation is only noticed on the next account read | *(unset → webhook ignored)* | **Yes** |
+| `LUKE_PAYMENTS_CONNECT_REDIRECT_URL` | Where Stripe returns the owner (`<consumer-ui>/forms/payments`; register it in Stripe) | `http://localhost:5173/forms/payments` | No |
+| `LUKE_PAYMENTS_PENDING_TTL_MINUTES` | Unpaid submissions older than this are cancelled at Stripe and released | `120` (min 5) | No |
+| `LUKE_PAYMENTS_RECONCILE_ENABLED` / `LUKE_PAYMENTS_RECONCILE_MS` | Stale-charge reconciler switch / interval (runs on its own thread) | `true` / `300000` | No |
+| `LUKE_PAYMENTS_RECONCILE_BUDGET_MS` | A reconciler run stops after this long; the rest waits for the next run | `120000` | No |
+| `STRIPE_JS_URL` | Stripe.js URL; must start with `https://js.stripe.com/`, anything else disables payments (with a warning) | `https://js.stripe.com/v3/` | No |
+
 ### Email (Postmark)
 
 | Variable | Purpose | Default | Secret? |
