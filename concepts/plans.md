@@ -16,7 +16,7 @@ gate, the operator admin, and the self-serve `GET /api/plan` the UI reads.
 | Tier | Price/mo | Submissions | AI actions | Emails | Storage | Seats | Capabilities | Extras |
 | --- | --: | --: | --: | --: | --: | --: | --- | --- |
 | **Free** | $0 | 100 | 10 | 60 | 0.5 GB | 1 | Forms | — |
-| **Pro** | $39 | 2,000 | 500 | 2,000 | 5 GB | 3 | + Email | Removable badge · attachments |
+| **Pro** | $39 | 2,000 | 500 | 2,000 | 5 GB | 3 | + Email | Removable badge · attachments · form payments |
 | **Business** | $149 | 15,000 | 2,000 | 15,000 | 25 GB | 10 | + Signatures, Calendar | + SSO |
 | **Enterprise** | Custom | Unlimited | Unlimited | Unlimited | Unlimited | Unlimited | + Phone, Workflow, SLA | + Voice · self-host |
 

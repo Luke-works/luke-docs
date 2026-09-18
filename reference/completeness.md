@@ -89,6 +89,16 @@ a live **storage gauge** (a SUM of the tenant's non-deleted document bytes) join
 cost-control note below anticipated). All default-lenient: unset = off. See
 [Plans, Limits & Usage](/concepts/plans).
 
+**Form payments (2026-09).** Forms can take card payments through each workspace's **own Stripe
+account** (Connect OAuth, direct charges, no platform fee; Pro+). The amount is always priced
+server-side (`fixed` · `perUnit` · `entered` — deliberately no formula mode), a paid submission waits in
+`AWAITING_PAYMENT` and reaches its process only after Stripe confirms the charge, and abandoned charges
+are cancelled at Stripe before release. Built end to end — form-core pricing + diagnostics (with a
+TS↔Java parity fixture), the form-react Payment Element adapter, builder editors, core-engine
+`payments` module (V26), and the consumer-ui settings page + public pay flows — and **config-gated**:
+nothing changes until the Stripe keys are set. Live payments still need the Stripe platform setup in
+`luke-core-engine/docs/runbooks/form-payments.md`. See [Forms → Payments](/capabilities/forms#payments-stripe-bring-your-own-account).
+
 **Production-readiness prep (2026-07-27/28).** With MVP hardening done, go-live is being staged as three
 tracked verticals in `luke-platform` — Observability ([#13](https://github.com/Luke-works/luke-platform/issues/13)),
 Prod cutover ([#14](https://github.com/Luke-works/luke-platform/issues/14)), WorkOS→Prod RBAC

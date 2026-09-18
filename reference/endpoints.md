@@ -286,6 +286,11 @@ opt-in (`luke.plan.enforce-usage-limits`, `luke.plan.enforce-capability-tiers` �
 | GET | `/api/billing/config` | Is checkout wired + which tiers are buyable | Tenant |
 | POST | `/api/billing/checkout` | Start Stripe Checkout for a tier → `{ url }` | Tenant |
 | POST | `/webhooks/stripe` | Stripe billing events (applies the paid plan) | Stripe signature |
+| GET | `/api/payments/account` | Workspace form-payments status + connected Stripe account | Member |
+| POST | `/api/payments/connect` · `/api/payments/connect/complete` | Stripe Connect OAuth start / finish (completed for the workspace that started it) | Owner |
+| POST · DELETE | `/api/payments/account/refresh` · `/api/payments/account` | Re-read / disconnect the Stripe account | Owner |
+| GET | `/api/payments/submissions/{instanceId}` | A submission's charge (no secrets) | Member with FORMS read |
+| POST | `/webhooks/stripe-connect` | Connected-account events (form payments) | Stripe signature |
 | GET | `/api/tenants/{tenantId}/plan` | One tenant's stored plan + badge rule | Operator-Basic |
 | PUT | `/api/tenants/{tenantId}/plan` | Set a tenant's tier (manual write) | Operator-Basic |
 
