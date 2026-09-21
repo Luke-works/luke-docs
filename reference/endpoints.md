@@ -291,6 +291,12 @@ opt-in (`luke.plan.enforce-usage-limits`, `luke.plan.enforce-capability-tiers` �
 | POST · DELETE | `/api/payments/account/refresh` · `/api/payments/account` | Re-read / disconnect the Stripe account | Owner |
 | GET | `/api/payments/submissions/{instanceId}` | A submission's charge (no secrets) | Member with FORMS read |
 | POST | `/webhooks/stripe-connect` | Connected-account events (form payments) | Stripe signature |
+| GET | `/api/ai/config` | Is an agent fleet wired + which providers can be connected | Member |
+| GET | `/api/ai/provider` | The workspace's connected AI provider (never the key — last four only) | Member |
+| PUT · DELETE | `/api/ai/provider` | Connect/rotate the workspace's own LLM key (verified with the provider first) · forget it | Owner |
+| POST | `/api/ai/provider/verify` | Re-check the stored key with the provider | Owner |
+| GET · PUT | `/api/ai/provider/models` · `/api/ai/provider/model` | Models that key may actually use · choose one | Owner |
+| POST | `/api/ai/agents/{slug}/{op}` | The only door to the [Agents](/services/agents) fleet — attaches the workspace's own key server-side | Member with that capability's WRITE |
 | GET | `/api/tenants/{tenantId}/plan` | One tenant's stored plan + badge rule | Operator-Basic |
 | PUT | `/api/tenants/{tenantId}/plan` | Set a tenant's tier (manual write) | Operator-Basic |
 

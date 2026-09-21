@@ -12,7 +12,7 @@ The deployed backend.
 | `luke-core-engine` | BPMN engine + capability data layer | Java / Spring / FluxNova | <span class="pill partial">Partial · deployed</span> | [Core Engine](/services/core-engine) |
 | `luke-auth-engine` | WorkOS ↔ engine auth gateway | Java / Spring | <span class="pill ready">Ready · deployed</span> | [Auth Engine](/services/auth-engine) |
 | `luke-file-proxy` | S3 byte-proxy + PDF render | Java / Spring + Chromium | <span class="pill partial">Partial · deployed</span> | [File Proxy](/services/file-proxy) |
-| `luke-agents` | AI agent fleet | Python / FastAPI / Groq | <span class="pill ready">Ready · deployed</span> | [Agents](/services/agents) |
+| `luke-agents` | AI agent fleet (runs on each workspace's own LLM key) | Python / FastAPI | <span class="pill ready">Ready · deployed</span> | [Agents](/services/agents) |
 
 ## Applications
 
