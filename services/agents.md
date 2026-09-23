@@ -10,7 +10,11 @@ The Agents service is Lukeflow's **multi-agent LLM platform**: a fleet of small,
 
 Every agent solves the same shape of problem: *describe what you want in natural language, get back a strict, machine-readable object*. Rather than run a separate service per agent (and pay for each), `luke-agents` hosts them together. A shared `core` layer handles everything an agent needs — LLM brain selection, per-caller rate limiting, tenancy, auth, and transcript recording — and each agent is just a package that contributes a system prompt, a Pydantic response schema, and a FastAPI router.
 
-The service is called browser-direct today (e.g. the [Consumer UI](/apps/consumer-ui) Form Builder posts a description and renders the returned schema live) and is designed to move behind the auth gateway server-side, at which point the API-key and tenant gates close fully. It **supersedes** the old standalone `luke-form-agent`: the form agent is still served at the root `POST /chat`, so pointing a legacy client's `VITE_FORM_AGENT_URL` at this service is a drop-in swap.
+The service sits **behind Core Engine**: the browser posts to `/api/ai/agents/<slug>/<op>` on the engine, which authenticates the caller, checks they may act for the workspace, and forwards the turn with that workspace's own provider credential attached. Nothing reaches the fleet from a browser. It **supersedes** the old standalone `luke-form-agent`: the form agent is still served at the root `POST /chat`, so an existing server-side client is a drop-in swap.
+
+::: warning Bring your own key — the fleet holds no provider key
+Every turn runs on the **calling workspace's own LLM account**, not on a key Lukeflow pays for. Core Engine decrypts that workspace's key and attaches it to the request as `X-AI-Provider` / `X-AI-Key` / `X-AI-Model`; the fleet resolves it per request (`core/credential.py`) and runs the turn on it. With `AGENTS_REQUIRE_CREDENTIAL=true` a turn that arrives without one is refused with **402**, never served from a platform key. See [Consumer UI](/apps/consumer-ui) for the connect page and [Core Engine](/services/core-engine) for where the key is stored.
+:::
 
 ::: info Headless by design
 The agents only produce and validate JSON. They do not persist forms, send email, or run workflows — those belong to Core Engine and the [Forms](/libraries/forms) / [Email](/libraries/email) libraries. An agent's output is an artifact the caller then owns.
@@ -114,15 +118,18 @@ Hardening is layered so dev/qa stay lenient (browser-direct, no gateway) while a
 | Language / runtime | Python 3.12 (`.python-version`; Render pins `PYTHON_VERSION=3.12.8`) |
 | Framework | FastAPI 0.116 + `uvicorn[standard]` |
 | Validation | Pydantic 2.10 (typed, schema-forced JSON per turn) |
-| Default brain / model | **Groq** — `openai/gpt-oss-120b` primary, `llama-3.3-70b-versatile` fallback |
-| Alternate brains | OpenAI (`gpt-5-nano`, Structured Outputs), Gemini (`gemini-2.0-flash`), Ollama (`qwen2.5:7b`, local dev) — first key present wins, or force with `AGENTS_BRAIN` |
+| Brain selection | **Per request**, from the workspace's connected provider. The env keys below are the local-dev fallback only |
+| Providers a workspace can bring | Groq (`openai/gpt-oss-120b`), OpenAI (`gpt-5-nano`, Structured Outputs), Anthropic (`claude-haiku-4-5`, forced tool use), Gemini (`gemini-2.0-flash`) — plus their own choice of model within that account |
+| Local-dev fallback | First env key present wins, or force with `AGENTS_BRAIN`; Ollama (`qwen2.5:7b`) when no cloud key is set. Refused outright when `AGENTS_REQUIRE_CREDENTIAL=true` |
 | Rate-limit store | Redis (`redis` 5.2, sorted-set sliding window) or in-memory fallback |
 | Transcript store | Postgres (`psycopg2-binary`, `luke_agents` schema; schema managed by **Alembic** migrations run as a pre-deploy step) or append-only JSONL (dev) |
 | CI | GitHub Actions — compileall + `pytest` on 3.12 every PR / push to `develop`; separate Semgrep + gitleaks + Trivy security scan |
 | Tests | ~91 tests across ~14 files (ratelimit/Redis, tenancy, prompt-injection bounds, retention/PII, streaming export, timeouts, security hardening, observability) |
 | Container | **None** — Render-native Python runtime (no Dockerfile) |
 
-The brain layer (`core/llm.py`) is agent-agnostic: an agent hands `generate()` its system prompt, the user message, and the Pydantic model it wants back, and the module drives whichever backend is active, forces schema-shaped JSON, validates, and returns the typed object.
+The brain layer (`core/llm.py`) is agent-agnostic: an agent hands `generate()` its system prompt, the user message, and the Pydantic model it wants back, and the module drives whichever backend this request's credential names, forces schema-shaped JSON, validates, and returns the typed object.
+
+Because the provider key now varies per request, **everything derived from it is keyed by a hash of the credential** — provider SDK clients and circuit-breaker state alike. Cached under a bare brain name, a client built with one workspace's key would serve another workspace's turn, and one revoked key would open the circuit for every workspace on that provider. A workspace's explicit model choice is also never silently substituted: the per-agent cheap-model override and Groq's fallback model apply only on the local-dev path.
 
 ## Local development
 
@@ -147,7 +154,9 @@ Create `luke_agents/agents/<name>/` with an `Agent` subclass that sets `meta` an
 
 ## Deployment
 
-Deployed on **Render** via a `render.yaml` **Blueprint** (New ➜ Blueprint picks it up). It runs on the native Python runtime — no Dockerfile — with `pip install -r requirements.txt` and `uvicorn main:app --host 0.0.0.0 --port $PORT`. Secrets (`GROQ_API_KEY`, `OPENAI_API_KEY`, `AGENTS_BRAIN`, `REDIS_URL`, `DATABASE_URL`) are `sync:false`, set per service in the dashboard so they stay out of git.
+Deployed on **Render** via a `render.yaml` **Blueprint** (New ➜ Blueprint picks it up). It runs on the native Python runtime — no Dockerfile — with `pip install -r requirements.txt` and `uvicorn main:app --host 0.0.0.0 --port $PORT`.
+
+**There is no platform provider key in any deployed environment.** `GROQ_API_KEY` and friends were removed from the Lukeflow blueprints when bring-your-own-key landed; what each environment sets instead is `AGENTS_REQUIRE_CREDENTIAL=true`, `AGENTS_REQUIRE_TENANT=true`, and `AGENTS_API_KEY` — generated once per environment in a shared env-var group so Core Engine and the fleet always hold the same value. `REDIS_URL` / `DATABASE_URL` remain `sync:false`.
 
 ::: warning Multi-worker needs Redis
 The in-memory rate limiter is correct only for a single always-on single-worker instance. Any multi-worker / HA / autoscaled run **must** set `REDIS_URL` (a Render Key Value instance) or the per-caller budget is per-worker and the effective cap is multiplied. Likewise, set `DATABASE_URL` for durable transcripts — Render's disk is ephemeral, so JSONL recording does not survive a redeploy.
@@ -160,6 +169,7 @@ Production-ready and deployed. Known items to be aware of:
 - **Durable, observable transcript writes.** Turn writes run off the response path on a bounded queue that retries transient DB/pool errors with backoff, counts drops (surfaced at `/health`, never a silently-swallowed exception), and is flushed on graceful shutdown (Render SIGTERMs on every redeploy). The Postgres pool is sized via `AGENTS_DB_POOL_MIN/MAX`. JSONL is **dev-only**: in production (`AGENTS_ENV`) with transcripts enabled and no `DATABASE_URL`, recording is **disabled with a loud warning** rather than silently written to Render's ephemeral disk — set `DATABASE_URL` for durable retention and fine-tuning exports. Recording still never fails a chat.
 - **Versioned schema migrations.** The transcript schema is managed by Alembic (`migrations/`), not ad-hoc inline DDL: ordered, reviewable revisions parameterized by `AGENTS_DB_SCHEMA`, applied via `alembic upgrade head` as a `render.yaml` pre-deploy step (a no-op when `DATABASE_URL` is unset). CI spins Postgres and asserts they upgrade, reverse, and re-apply cleanly. The app's `init()` remains a runtime safety-net so a first boot works before migrations run.
 - **No live-LLM integration tests.** The ~104 tests cover the plumbing (rate limiting, tenancy, prompt-injection bounds, retention/PII, export streaming, timeouts, transcript durability) with the model mocked; there is no test that exercises a real Groq/OpenAI call end-to-end, so provider/model drift is caught only at runtime.
-- **Auth/tenant gates default-lenient.** The API-key and tenant checks are no-ops until `AGENTS_API_KEY` / `AGENTS_REQUIRE_TENANT` are set, which is intended for the current browser-direct flow but means the unauthenticated surface only closes once traffic routes through the gateway server-side.
+- **Auth/tenant gates are default-lenient in code, armed in the blueprints.** The API-key and tenant checks are no-ops until `AGENTS_API_KEY` / `AGENTS_REQUIRE_TENANT` are set, so a local run stays easy; every deployed environment sets them, and `AGENTS_ENV=production` refuses to boot without them (plus `AGENTS_REQUIRE_CREDENTIAL`). Before bring-your-own-key the dev fleet was reachable unauthenticated from the internet and would serve a turn on the platform's own Groq key — removing the platform key from the request path is what actually closed that, since there is now nothing to spend.
+- **Test coverage of the credential boundary.** The isolation properties are pinned by tests (`tests/test_byo_credential.py`): two workspaces never share a provider client, one workspace's failures cannot open another's circuit, a credential does not survive into the next request, and the key never appears in a repr, log or error. What is still untested is a real provider call — see the live-LLM gap above.
 
 For how this service scores against the broader platform readiness checklist, see the [Completeness Scorecard](/reference/completeness).

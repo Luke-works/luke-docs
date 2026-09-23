@@ -26,8 +26,8 @@ explicitly told it is in production (`AGENTS_ENV=production`):
   backdoors in a shared/prod environment. Related guards enforce a stable gateway
   signing key and reject `WORKOS_MARK_EMAIL_VERIFIED=true` outside dev-mode.
 - **luke-agents** — with `AGENTS_ENV=production` the app **refuses to start** unless
-  it is locked down: `AGENTS_API_KEY` set, `AGENTS_CORS` not `*`, and
-  `AGENTS_REQUIRE_TENANT=true`.
+  it is locked down: `AGENTS_API_KEY` set, `AGENTS_CORS` not `*`,
+  `AGENTS_REQUIRE_TENANT=true`, and `AGENTS_REQUIRE_CREDENTIAL=true`.
 
 Leave these guards' variables at their defaults for local development; set the
 hardened values in qa/uat/prod. See [Security](/operations/security) for the full
@@ -118,6 +118,18 @@ All unset → payments self-disable. Test and live keys must not be mixed. Setup
 | `LUKE_PAYMENTS_RECONCILE_ENABLED` / `LUKE_PAYMENTS_RECONCILE_MS` | Stale-charge reconciler switch / interval (runs on its own thread) | `true` / `300000` | No |
 | `LUKE_PAYMENTS_RECONCILE_BUDGET_MS` | A reconciler run stops after this long; the rest waits for the next run | `120000` | No |
 | `STRIPE_JS_URL` | Stripe.js URL; must start with `https://js.stripe.com/`, anything else disables payments (with a warning) | `https://js.stripe.com/v3/` | No |
+
+### AI assistant (bring your own key)
+
+The engine is the only caller of the [Agents](/services/agents) fleet, and the only holder of each
+workspace's LLM key. **None of these is a provider key** — a workspace's own key is stored in
+`luke_secrets` and never appears in configuration.
+
+| Variable | Purpose | Default | Secret? |
+| --- | --- | --- | --- |
+| `LUKE_AI_AGENTS_URL` | Base URL of the luke-agents fleet. Unset → the whole AI feature self-disables (settings page says so, agent proxy 404s) | *(unset → off)* | No |
+| `AGENTS_API_KEY` | Presented to the fleet as `X-Agents-Key`. Generated once per environment in a shared env-var group so the engine and the fleet always match (`luke.ai.service-key` overrides) | *(unset)* | **Yes** |
+| `LUKE_AI_TIMEOUT_MS` | How long to wait for one agent turn (`luke.ai.timeout-ms`) | `90000` | No |
 
 ### Email (Postmark)
 
@@ -304,6 +316,7 @@ lockdown guard described in the warning above.
 | `AGENTS_API_KEY` | Caller key (sent as `X-Agents-Key`); required in prod | *(unset)* | **Yes** |
 | `AGENTS_CORS` | Allowed browser origins (CSV; must not be `*` in prod) | `*` | No |
 | `AGENTS_REQUIRE_TENANT` | Require tenant header (behind gateway); true in prod | `false` | No |
+| `AGENTS_REQUIRE_CREDENTIAL` | Refuse (402) a turn with no workspace provider credential instead of falling back to a platform key. **True in every deployed environment**; required in prod | `false` | No |
 | `AGENTS_DEFAULT_TENANT` | Fallback tenant id | `public` | No |
 | `AGENTS_ACTOR` | Actor label for audit | *(unset)* | No |
 | `RATE_LIMIT_MAX` | Per-caller action cap | `200` | No |
@@ -312,15 +325,25 @@ lockdown guard described in the warning above.
 
 ### LLM brains
 
+::: warning These are the LOCAL-DEV fallback only
+Under bring-your-own-key the brain is chosen **per request**, from the calling workspace's own
+provider account — Core Engine decrypts their key and attaches it to the turn. No deployed
+environment sets any of the keys below, and with `AGENTS_REQUIRE_CREDENTIAL=true` they are never
+consulted at all. They exist so a developer can run the fleet standalone.
+:::
+
 | Variable | Purpose | Default | Secret? |
 | --- | --- | --- | --- |
-| `AGENTS_BRAIN` | Force brain: `groq` \| `openai` \| `gemini` \| `ollama` | *(auto; Groq wins)* | No |
+| `AGENTS_BRAIN` | Force brain: `groq` \| `openai` \| `anthropic` \| `gemini` \| `ollama` | *(auto; Groq wins)* | No |
 | `GROQ_API_KEY` | Groq API key (default brain) | *(unset)* | **Yes** |
 | `GROQ_MODEL` | Groq model | `openai/gpt-oss-120b` | No |
 | `GROQ_FALLBACK_MODEL` | Groq fallback model | `llama-3.3-70b-versatile` | No |
 | `OPENAI_API_KEY` | OpenAI API key | *(unset)* | **Yes** |
 | `OPENAI_MODEL` | OpenAI model | `gpt-5-nano` | No |
 | `OPENAI_REASONING_EFFORT` | Reasoning effort (blank for nano) | *(empty)* | No |
+| `ANTHROPIC_API_KEY` | Anthropic API key | *(unset)* | **Yes** |
+| `ANTHROPIC_MODEL` | Anthropic model | `claude-haiku-4-5-20251001` | No |
+| `ANTHROPIC_MAX_TOKENS` | Output cap (Anthropic requires one on every call) | `8192` | No |
 | `GEMINI_API_KEY` | Gemini API key | *(unset)* | **Yes** |
 | `GEMINI_MODEL` | Gemini model | `gemini-2.0-flash` | No |
 | `OLLAMA_MODEL` | Local Ollama model (dev fallback) | `qwen2.5:7b` | No |

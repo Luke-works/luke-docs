@@ -238,8 +238,18 @@ mid-load.
   **Upgrade** button opens Stripe Checkout (`POST /api/billing/checkout` → redirect); otherwise it
   falls back to a sales-contact link. See [Plans, Limits & Usage](/concepts/plans).
 - **Tenant switching** — multi-tenant session switching in the sidebar.
-- **AI assist panels** — per-capability assistants (forms, email, workflow) calling
-  the `luke-agents` fleet.
+- **AI assist panels** — per-capability assistants (forms, email, workflow). They no longer
+  call `luke-agents` directly: every turn goes through Core Engine at `/api/ai`
+  (`lib/agentTransport.ts`), which attaches the workspace's own provider key. A `402` becomes
+  `AgentProviderRequiredError` — never retried, since retrying cannot make a missing key
+  appear — and the panel offers **Connect your AI provider** instead of an error.
+- **AI settings (`/ai`)** — bring your own AI provider. The workspace owner picks Groq, OpenAI,
+  Anthropic or Gemini, pastes their key and chooses a model; the model list is read live from
+  their own account, so it shows what their key can actually run. The key is verified with the
+  provider before it is stored, encrypted at rest by Core Engine, and never returned to the
+  page — the most it shows is the last four characters. Same doctrine as
+  [Forms → Payments](/capabilities/forms#payments-stripe-bring-your-own-account): Lukeflow
+  enables the capability, the workspace brings the account that gets billed. No plan gate.
 - **Observability** — Sentry (`@sentry/react`) wiring via `lib/observability`.
 - **Autofill suppression** — inputs suppress browser/password-manager autofill by
   default (`lib/autofill`).
