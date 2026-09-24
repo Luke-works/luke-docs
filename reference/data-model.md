@@ -207,6 +207,8 @@ erDiagram
 | Table | Key columns | Purpose |
 | --- | --- | --- |
 | `luke_secrets` | `id`, `tenant_id`, `name`, uq `(tenant_id, name)`, `ciphertext`, `iv`, `key_id`, `last_four`, `managed_by`, `version` | Envelope-encrypted per-tenant secrets referenced by capabilities that call third-party APIs. |
+| `luke_ai_provider` | `id` (= `<tenantId>:<provider>`), `tenant_id`, `provider`, uq `(tenant_id, provider)`, `preferred`, `model`, `status`, `key_last4`, `key_fingerprint`, `connected_by`, `connected_at`, `verified_at`, `disconnected_at`, `last_error` | One connected LLM account per provider per workspace (V27; made multi-row by V29). **Holds no key** — that lives in `luke_secrets` under `ai.provider-key.<provider>`; this table keeps only what is safe to show or decide on, including a SHA-256 fingerprint that tells a rotation from a re-save. Exactly one row per workspace carries `preferred`, the provider a turn uses when nobody has chosen otherwise. |
+| `luke_ai_user_pref` | `id`, `tenant_id`, `user_id`, uq `(tenant_id, user_id)`, `provider`, `model` | One person's own model choice within one workspace (V28). The **key** stays the workspace's; only the model is per person, so two people on one account can run different models. Server-side so the choice follows them between devices. Holds no secret. |
 
 ## Workflow & Integrations
 
