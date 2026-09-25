@@ -243,9 +243,15 @@ mid-load.
   (`lib/agentTransport.ts`), which attaches the workspace's own provider key. A `402` becomes
   `AgentProviderRequiredError` — never retried, since retrying cannot make a missing key
   appear — and the panel offers **Connect your AI provider** instead of an error.
-- **AI settings (`/ai`)** — bring your own AI provider. The workspace owner picks Groq, OpenAI,
-  Anthropic or Gemini, pastes their key and chooses a model; the model list is read live from
-  their own account, so it shows what their key can actually run. The key is verified with the
+- **AI settings (`/ai`)** — bring your own AI provider. The workspace owner connects Groq,
+  OpenAI, Anthropic and Gemini — **as many as they like, together** — each as its own collapsible
+  section showing whether that key is working, the four characters it ends with and when it was
+  last checked; a provider whose key has stopped working opens by default rather than hiding the
+  one thing worth seeing. One connected provider is the workspace **default**; anyone may pick a
+  model from any of them, and that choice is remembered per person, server-side. The model list is
+  read live from their own account, so it shows what their key can actually run, and models are
+  grouped by whether they can serve a build turn at all — a speech-to-text model stays reachable
+  but stops sitting beside a chat model as an equal choice. The key is verified with the
   provider before it is stored, encrypted at rest by Core Engine, and never returned to the
   page — the most it shows is the last four characters. Same doctrine as
   [Forms → Payments](/capabilities/forms#payments-stripe-bring-your-own-account): Lukeflow
