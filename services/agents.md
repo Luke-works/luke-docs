@@ -147,10 +147,46 @@ Hardening is layered so dev/qa stay lenient (browser-direct, no gateway) while a
 | Rate-limit store | Redis (`redis` 5.2, sorted-set sliding window) or in-memory fallback |
 | Transcript store | Postgres (`psycopg2-binary`, `luke_agents` schema; schema managed by **Alembic** migrations run as a pre-deploy step) or append-only JSONL (dev) |
 | CI | GitHub Actions — compileall + `pytest` on 3.12 every PR / push to `develop`; separate Semgrep + gitleaks + Trivy security scan |
-| Tests | ~929 tests across ~30 files (ratelimit/Redis, tenancy, prompt-injection bounds, retention/PII, streaming export, timeouts, security hardening, observability) |
+| Concurrency | **Async request path** — provider calls are awaited, bounded by `LLM_MAX_INFLIGHT` (64/worker). 2 uvicorn workers; `AGENTS_THREADPOOL` 160 for the endpoints that stay sync |
+| Tests | ~947 tests across ~33 files (ratelimit/Redis, tenancy, prompt-injection bounds, retention/PII, streaming export, timeouts, security hardening, observability) |
 | Container | **None** — Render-native Python runtime (no Dockerfile) |
 
 The brain layer (`core/llm.py`) is agent-agnostic: an agent hands `generate()` its system prompt, the user message, and the Pydantic model it wants back, and the module drives whichever backend is active, forces schema-shaped JSON, validates, and returns the typed object.
+
+### The request path is async, and what that did and did not buy
+
+Every agent endpoint used to be a plain `def`, so FastAPI ran it in anyio's threadpool and each
+in-flight turn held a slot for its whole provider call. That slot count **was** the concurrency
+ceiling — chosen for a world where a turn was one call. A research turn is three (build → search →
+rebuild), so it holds a slot ~3× as long, and 40 slots went from ~1.3 to ~0.47 turns/second.
+
+`generate` / `research` / `_run_brain` and all five provider paths are coroutines on the async SDK
+clients (`AsyncGroq`, `AsyncOpenAI`, `AsyncAnthropic`, genai `.aio`). A turn in flight now costs a
+socket and a coroutine, not a thread.
+
+::: warning Async is for the wait, not for everything
+An `async def` containing a blocking call is WORSE than the threadpool it replaced: it stalls the
+whole worker rather than occupying one slot. The conversion shipped exactly that twice before
+review caught it — `tokenbudget.check` reading a Redis counter, and `/feedback` writing to
+Postgres — so the rules are now explicit and tested:
+
+- **Awaited** — anything waiting on a provider socket. That is the 85 seconds worth moving.
+- **`run_in_threadpool`** — brief blocking I/O in front of a turn (the rate limiter,
+  `tokenbudget.check`). A thread slot is the right cost for a millisecond.
+- **Left sync** — endpoints that make no provider call at all. `/feedback` does two psycopg2
+  writes; as a coroutine those run on the loop, as a `def` they take one pool slot.
+- **The exception that proves it** — `tokenbudget.bind` must run ON the loop, because it writes a
+  ContextVar and a threadpool runs in a *copy*. Move it and the daily cap silently stops counting.
+
+`tests/test_async_request_path.py` pins all four, including a heartbeat test that fails if a
+blocking call reappears in the real request path (restoring the shipped blocker takes the loop
+from twelve passing ticks to **one**).
+:::
+
+The threadpool was also the only thing bounding concurrent provider calls — by accident. Awaiting
+removed it, so `LLM_MAX_INFLIGHT` puts a deliberate ceiling back: without one, a burst opens as
+many upstream connections as requests arrive and the failure lands as the provider rate-limiting
+the workspace's own key.
 
 ### Web research is a second call, on purpose
 
