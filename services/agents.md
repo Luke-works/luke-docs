@@ -10,11 +10,7 @@ The Agents service is Lukeflow's **multi-agent LLM platform**: a fleet of small,
 
 Every agent solves the same shape of problem: *describe what you want in natural language, get back a strict, machine-readable object*. Rather than run a separate service per agent (and pay for each), `luke-agents` hosts them together. A shared `core` layer handles everything an agent needs — LLM brain selection, per-caller rate limiting, tenancy, auth, and transcript recording — and each agent is just a package that contributes a system prompt, a Pydantic response schema, and a FastAPI router.
 
-The service sits **behind Core Engine**: the browser posts to `/api/ai/agents/<slug>/<op>` on the engine, which authenticates the caller, checks they may act for the workspace, and forwards the turn with that workspace's own provider credential attached. Nothing reaches the fleet from a browser. It **supersedes** the old standalone `luke-form-agent`: the form agent is still served at the root `POST /chat`, so an existing server-side client is a drop-in swap.
-
-::: warning Bring your own key — the fleet holds no provider key
-Every turn runs on the **calling workspace's own LLM account**, not on a key Lukeflow pays for. Core Engine decrypts that workspace's key and attaches it to the request as `X-AI-Provider` / `X-AI-Key` / `X-AI-Model`; the fleet resolves it per request (`core/credential.py`) and runs the turn on it. With `AGENTS_REQUIRE_CREDENTIAL=true` a turn that arrives without one is refused with **402**, never served from a platform key. See [Consumer UI](/apps/consumer-ui) for the connect page and [Core Engine](/services/core-engine) for where the key is stored.
-:::
+The service is called browser-direct today (e.g. the [Consumer UI](/apps/consumer-ui) Form Builder posts a description and renders the returned schema live) and is designed to move behind the auth gateway server-side, at which point the API-key and tenant gates close fully. It **supersedes** the old standalone `luke-form-agent`: the form agent is still served at the root `POST /chat`, so pointing a legacy client's `VITE_FORM_AGENT_URL` at this service is a drop-in swap.
 
 ::: info Headless by design
 The agents only produce and validate JSON. They do not persist forms, send email, or run workflows — those belong to Core Engine and the [Forms](/libraries/forms) / [Email](/libraries/email) libraries. An agent's output is an artifact the caller then owns.
@@ -46,8 +42,6 @@ consumer-ui / core-engine
 | `sentiment` (LukeSense) | LukeSense Sentiment Analyzer | 0.1.0 | `POST /analyze`, `POST /batch`, `POST /intake` | sentiment / urgency / theme classification of short business text |
 | `workflow` | LukeFlow Workflow Builder | 0.1.0 | `POST /chat` | valid, wireable `WorkflowDoc` |
 
-Plus one fleet-level route that runs no turn: **`POST /model-ranking`** — see **Recommending models, at no cost** under [Key features](#key-features).
-
 ### LukeBuilds renders schemas the product will actually accept
 
 The form agent does **not** let the LLM write a builder schema. The model emits a flat field list
@@ -69,14 +63,26 @@ All seven were data keys the model chose:
 | a field named like a container's nested **child** | `duplicate-key` |
 
 The prompt *asks* for snake_case, which is not the same as holding the model to it — and the last
-case it cannot avoid unaided, since it never sees a container's children yet shares their
-submission namespace.
+case it still cannot always avoid unaided. The agent projects the containers it MODELS, so it does
+see those children now; but a `dataGrid` or `editGrid` is a row template rather than a section and
+stays preserved verbatim, invisible to the model while still occupying the submission namespace.
 
 `spec_to_schema` now normalises every key at the single point where schemas are produced. Accents
 decompose rather than vanish (`naïve` → `naive`), an unusable key falls back to the **label**
 before an anonymous name (`123` on "Age" → `age`), duplicates are suffixed with the first field
 keeping the plain key, a preserved entity always wins the key it already owns (renaming it would
 silently move existing data), and a valid author-chosen key is untouched (`firstName` survives).
+
+### Layout is part of the contract now
+
+`FormSpec` was a FLAT list, so a layout container was not merely missing from a type list — it was
+**unrepresentable**, and a user asking for "tabs for each section" could not be served at any
+prompt. `SpecField` carries `children`, the renderer emits the schema's id-reference nesting
+(`children` on the parent, `parentId` on each child), `schema_to_spec` recurses so the model can
+READ BACK what it built (carried past it instead, it would build tabs and report on the next turn
+that the form had none), and `FormOp` gained `parent` so an op can reach a field inside a tab.
+Tabs take `panel` children, a wizard takes `page` children — both verified against form-core's
+renderer rather than assumed.
 
 ::: tip The contract is enforced in BOTH languages
 `tests/form_matrix.py` builds the combination matrix — every field type (read off `FieldType`, so
@@ -89,6 +95,21 @@ where `agentSchema.parity.test.ts` runs form-core's own validator over them, mir
 only form-core can. It also catches drift the other way — tighten `KEY_REGEX_SOURCE` or
 `RESERVED_KEYS` and that suite fails, instead of the agent quietly shipping schemas the product
 no longer accepts.
+:::
+
+::: warning And the field-type list is held to the registry
+The fixture above proves the agent's schemas are VALID. It cannot notice the agent has fallen
+behind what the builder OFFERS — and on 2026-09-25 it had: `FieldType` held 13 of form-core's 48
+types, so the agent told a user *"the builder only has basic field types, with no layout
+containers like tabs or panels and no dedicated stepper control"* while they were looking at a
+palette containing all three. `stepper` had shipped hours earlier. Worse, the same 13 were
+hard-coded a **second** time in `coltorapps.py`, so the two drifted independently.
+
+luke-forms now exports its registry (`npm run fixtures:field-types` → `fixtures/field-types.json`,
+copied to `luke-agents/tests/fixtures/`), and `test_field_type_parity.py` fails when a type is in
+neither `FieldType` nor a `NOT_SUPPORTED` entry **with a reason**. Growing a field type is a
+decision someone takes, not a silence nobody notices. `KNOWN_FIELD_TYPES` is now derived from
+`FieldType` rather than re-listed.
 :::
 
 `GET /health` is a **liveness** signal (always 200 if the process is up — Render health-checks it, so a downstream blip can't restart the instance) reporting the active brain, the transcript backend (with an `ephemeral` flag and write counters), the default agent, and the mounted agents. `GET /health/ready` is a **readiness** probe that checks real dependencies — a brain must be resolvable and the transcript store reachable (Postgres `SELECT 1`) — and returns **503** when a dependency is down. Startup/shutdown run via a lifespan context manager (not deprecated `on_event` hooks). `GET /metrics` is an open Prometheus scrape target (request volume + latency + status, transcript-write counters, and **`agents_llm_tokens_total{brain,model,type}`** — LLM token consumption, the fleet's primary cost signal; `llm.last_usage()` also exposes per-turn usage for per-tenant spend accounting). `GET /` serves the default agent's UI (or a landing page).
@@ -111,8 +132,7 @@ Hardening is layered so dev/qa stay lenient (browser-direct, no gateway) while a
 - **PII redaction & retention** — form/email content can carry PII; `tools/retention.py` prunes aged transcripts and redaction keeps sensitive fields out of logs (see `docs/DATA_HANDLING.md`).
 - **Consent-gated transcripts** — every `/chat` turn is recorded as a ready-made supervised training example, but passing `consent:false` excludes that turn, and explicit `feedback` (`accepted:false` / `rating:-1`) is dropped from exports.
 - **Audit trail + operator-gated export** — sensitive actions write an append-only `audit_log` row (actor, action, scope, request id, timestamp; queryable). A `/feedback` label change is audited against the **verified principal** (the gateway-set tenant, never the client-supplied `user_id`). The fine-tune export / tenant-erasure CLI is gated behind an operator credential (`AGENTS_OPERATOR_TOKEN` + `--operator-token`) and records who exported what.
-- **Recommending models, at no cost** — a provider lists every model an account can reach and most of them cannot build a form, so `POST /model-ranking` answers *which of these are worth putting first for this job*, per agent and per provider. It is computed from turns that already ran: every turn records the model, whether the answer parsed into that agent's schema, how long it took and whether the person kept the result, so `PostgresStore.model_stats` aggregates the evidence a benchmark would otherwise have to buy. **There is deliberately no nightly eval.** Under bring-your-own-key (see the note at the top of this page) those turns would run on the *workspace's* provider account, and spending their money on work they never asked for is the thing that doctrine exists to prevent. Reliability decides the order outright unless two models are within a 5% band (a failed turn is visible to the person and bills them for the retry, so it does not trade off against latency); then what people kept, then speed. A small curated `SEED` covers the cold start and is overridden the moment real evidence disagrees with it — the reply says which it used (`evidence` / `mixed` / `seed`). Behind the API-key gate but **not** credential binding: ranking needs no provider key, and requiring one would withhold the recommendation from exactly the workspace that has not connected a provider yet. [Core Engine](/services/core-engine) merges the result into `GET /api/ai/provider/models?agent=…`, best-effort — an unreachable fleet leaves every model unmarked rather than failing the list.
-- **Supply-chain gate** — every dependency is version-pinned (no unpinned floors that let a future release silently break the build), **including transitive ones that matter**. That last clause was added the hard way: `alembic` asks only for `SQLAlchemy>=1.3.0`, SQLAlchemy 2.1.0 released and changed the default driver for a bare `postgresql://` URL from psycopg2 to psycopg v3, and the migrations job began failing on a repo where nothing had changed. Fixed in both places — `migrations/env.py` now names the driver (`postgresql+psycopg2://`) so the choice is ours rather than a default that can move, and SQLAlchemy is pinned explicitly. A **gating `pip-audit` CI job** fails the build on any dependency CVE. A small triaged baseline (a `starlette` finding awaiting a coordinated FastAPI upgrade) is explicitly ignored with a comment, so a pre-existing finding can't block delivery while any *newly-introduced* vulnerable dependency does. Complements the fleet's informational Semgrep/gitleaks/Trivy scan.
+- **Supply-chain gate** — every dependency is version-pinned (no unpinned floors that let a future release silently break the build), and a **gating `pip-audit` CI job** fails the build on any dependency CVE. A small triaged baseline (a `starlette` finding awaiting a coordinated FastAPI upgrade) is explicitly ignored with a comment, so a pre-existing finding can't block delivery while any *newly-introduced* vulnerable dependency does. Complements the fleet's informational Semgrep/gitleaks/Trivy scan.
 
 ## Technology
 
@@ -121,18 +141,38 @@ Hardening is layered so dev/qa stay lenient (browser-direct, no gateway) while a
 | Language / runtime | Python 3.12 (`.python-version`; Render pins `PYTHON_VERSION=3.12.8`) |
 | Framework | FastAPI 0.116 + `uvicorn[standard]` |
 | Validation | Pydantic 2.10 (typed, schema-forced JSON per turn) |
-| Brain selection | **Per request**, from the workspace's connected provider. The env keys below are the local-dev fallback only |
-| Providers a workspace can bring | Groq (`openai/gpt-oss-120b`), OpenAI (`gpt-5-nano`, Structured Outputs), Anthropic (`claude-haiku-4-5`, forced tool use), Gemini (`gemini-2.0-flash`) — plus their own choice of model within that account |
-| Local-dev fallback | First env key present wins, or force with `AGENTS_BRAIN`; Ollama (`qwen2.5:7b`) when no cloud key is set. Refused outright when `AGENTS_REQUIRE_CREDENTIAL=true` |
+| Default brain / model | **Groq** — `openai/gpt-oss-120b` primary, `llama-3.3-70b-versatile` fallback |
+| Alternate brains | **Anthropic** (`claude-haiku-4-5`, forced tool use for schema-shaped output), OpenAI (`gpt-5-nano`, Structured Outputs), Gemini (`gemini-2.0-flash`), Ollama (`qwen2.5:7b`, local dev) — first key present wins, or force with `AGENTS_BRAIN`. Under bring-your-own-key the workspace's credential and model win over all of it. |
+| Web research | Anthropic `web_search`, OpenAI `web_search` (Responses API), Gemini Google-Search grounding — a **separate** call per turn, only when the model asks. Groq and Ollama have none and build without it. |
 | Rate-limit store | Redis (`redis` 5.2, sorted-set sliding window) or in-memory fallback |
 | Transcript store | Postgres (`psycopg2-binary`, `luke_agents` schema; schema managed by **Alembic** migrations run as a pre-deploy step) or append-only JSONL (dev) |
 | CI | GitHub Actions — compileall + `pytest` on 3.12 every PR / push to `develop`; separate Semgrep + gitleaks + Trivy security scan |
-| Tests | ~91 tests across ~14 files (ratelimit/Redis, tenancy, prompt-injection bounds, retention/PII, streaming export, timeouts, security hardening, observability) |
+| Tests | ~929 tests across ~30 files (ratelimit/Redis, tenancy, prompt-injection bounds, retention/PII, streaming export, timeouts, security hardening, observability) |
 | Container | **None** — Render-native Python runtime (no Dockerfile) |
 
-The brain layer (`core/llm.py`) is agent-agnostic: an agent hands `generate()` its system prompt, the user message, and the Pydantic model it wants back, and the module drives whichever backend this request's credential names, forces schema-shaped JSON, validates, and returns the typed object.
+The brain layer (`core/llm.py`) is agent-agnostic: an agent hands `generate()` its system prompt, the user message, and the Pydantic model it wants back, and the module drives whichever backend is active, forces schema-shaped JSON, validates, and returns the typed object.
 
-Because the provider key now varies per request, **everything derived from it is keyed by a hash of the credential** — provider SDK clients and circuit-breaker state alike. Cached under a bare brain name, a client built with one workspace's key would serve another workspace's turn, and one revoked key would open the circuit for every workspace on that provider. A workspace's explicit model choice is also never silently substituted: the per-agent cheap-model override and Groq's fallback model apply only on the local-dev path.
+### Web research is a second call, on purpose
+
+`generate()` pins the output shape on every backend — Anthropic by forcing a tool, OpenAI via
+Structured Outputs, Gemini via `response_schema` — and **a pinned shape is exactly what stops a
+model searching first**: under a forced `tool_choice` the only legal move is to answer. Gemini
+goes further and rejects a search tool and `response_schema` in the same request outright.
+
+So `research(query)` is its own call, with a search tool and no schema, and its prose is fed into
+the ordinary build turn as fenced, untrusted context. The build keeps its guarantee, the research
+gets the web, and neither compromises for the other. It never raises: a failed search degrades to
+"answer from training data", which is what every turn did before it existed.
+
+The agent decides. The form agent's `AssistantTurn` carries a `research` field; when the model
+sets it, the agent searches and calls `generate()` **once** more with the findings — bounded to
+one extra round because the bill lands on the workspace's own provider account. A turn that needs
+no outside fact ("add a phone number") costs one completion and no search at all. Findings return
+to the caller as `sources` so the author can check a price that came off a web page.
+
+`RESEARCH_MAX_USES` caps searches per turn on Anthropic (`max_uses`) and OpenAI
+(`max_tool_calls`). **Gemini has no equivalent** — `types.GoogleSearch` exposes no cap — so a
+Gemini research turn is bounded by the output ceiling and the timeout instead.
 
 ## Local development
 
@@ -157,9 +197,7 @@ Create `luke_agents/agents/<name>/` with an `Agent` subclass that sets `meta` an
 
 ## Deployment
 
-Deployed on **Render** via a `render.yaml` **Blueprint** (New ➜ Blueprint picks it up). It runs on the native Python runtime — no Dockerfile — with `pip install -r requirements.txt` and `uvicorn main:app --host 0.0.0.0 --port $PORT`.
-
-**There is no platform provider key in any deployed environment.** `GROQ_API_KEY` and friends were removed from the Lukeflow blueprints when bring-your-own-key landed; what each environment sets instead is `AGENTS_REQUIRE_CREDENTIAL=true`, `AGENTS_REQUIRE_TENANT=true`, and `AGENTS_API_KEY` — generated once per environment in a shared env-var group so Core Engine and the fleet always hold the same value. `REDIS_URL` / `DATABASE_URL` remain `sync:false`.
+Deployed on **Render** via a `render.yaml` **Blueprint** (New ➜ Blueprint picks it up). It runs on the native Python runtime — no Dockerfile — with `pip install -r requirements.txt` and `uvicorn main:app --host 0.0.0.0 --port $PORT`. Secrets (`GROQ_API_KEY`, `OPENAI_API_KEY`, `AGENTS_BRAIN`, `REDIS_URL`, `DATABASE_URL`) are `sync:false`, set per service in the dashboard so they stay out of git.
 
 ::: warning Multi-worker needs Redis
 The in-memory rate limiter is correct only for a single always-on single-worker instance. Any multi-worker / HA / autoscaled run **must** set `REDIS_URL` (a Render Key Value instance) or the per-caller budget is per-worker and the effective cap is multiplied. Likewise, set `DATABASE_URL` for durable transcripts — Render's disk is ephemeral, so JSONL recording does not survive a redeploy.
@@ -172,7 +210,6 @@ Production-ready and deployed. Known items to be aware of:
 - **Durable, observable transcript writes.** Turn writes run off the response path on a bounded queue that retries transient DB/pool errors with backoff, counts drops (surfaced at `/health`, never a silently-swallowed exception), and is flushed on graceful shutdown (Render SIGTERMs on every redeploy). The Postgres pool is sized via `AGENTS_DB_POOL_MIN/MAX`. JSONL is **dev-only**: in production (`AGENTS_ENV`) with transcripts enabled and no `DATABASE_URL`, recording is **disabled with a loud warning** rather than silently written to Render's ephemeral disk — set `DATABASE_URL` for durable retention and fine-tuning exports. Recording still never fails a chat.
 - **Versioned schema migrations.** The transcript schema is managed by Alembic (`migrations/`), not ad-hoc inline DDL: ordered, reviewable revisions parameterized by `AGENTS_DB_SCHEMA`, applied via `alembic upgrade head` as a `render.yaml` pre-deploy step (a no-op when `DATABASE_URL` is unset). CI spins Postgres and asserts they upgrade, reverse, and re-apply cleanly. The app's `init()` remains a runtime safety-net so a first boot works before migrations run.
 - **No live-LLM integration tests.** The ~104 tests cover the plumbing (rate limiting, tenancy, prompt-injection bounds, retention/PII, export streaming, timeouts, transcript durability) with the model mocked; there is no test that exercises a real Groq/OpenAI call end-to-end, so provider/model drift is caught only at runtime.
-- **Auth/tenant gates are default-lenient in code, armed in the blueprints.** The API-key and tenant checks are no-ops until `AGENTS_API_KEY` / `AGENTS_REQUIRE_TENANT` are set, so a local run stays easy; every deployed environment sets them, and `AGENTS_ENV=production` refuses to boot without them (plus `AGENTS_REQUIRE_CREDENTIAL`). Before bring-your-own-key the dev fleet was reachable unauthenticated from the internet and would serve a turn on the platform's own Groq key — removing the platform key from the request path is what actually closed that, since there is now nothing to spend.
-- **Test coverage of the credential boundary.** The isolation properties are pinned by tests (`tests/test_byo_credential.py`): two workspaces never share a provider client, one workspace's failures cannot open another's circuit, a credential does not survive into the next request, and the key never appears in a repr, log or error. What is still untested is a real provider call — see the live-LLM gap above.
+- **Auth/tenant gates default-lenient.** The API-key and tenant checks are no-ops until `AGENTS_API_KEY` / `AGENTS_REQUIRE_TENANT` are set, which is intended for the current browser-direct flow but means the unauthenticated surface only closes once traffic routes through the gateway server-side.
 
 For how this service scores against the broader platform readiness checklist, see the [Completeness Scorecard](/reference/completeness).
